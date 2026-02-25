@@ -1,0 +1,11 @@
+{
+    "name": "PaperUI",
+    "version": "0.1.0",
+    "description": "Lightweight declarative UI framework for M5Stack Paper e-ink displays",
+    "frameworks": "arduino",
+    "platforms": "espressif32",
+    "build": {
+        "includeDir": ".",
+        "srcDir": "src"
+    }
+}
