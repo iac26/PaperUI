@@ -8,6 +8,9 @@
 #include "widgets/slider_widget.h"
 #include "widgets/checkbox_widget.h"
 #include "widgets/progress_bar_widget.h"
+#include "widgets/keyboard_widget.h"
+#include "widgets/text_area_widget.h"
+#include "widgets/battery_widget.h"
 #include "layouts/column.h"
 #include "layouts/row.h"
 #include "layouts/stack.h"
@@ -47,6 +50,15 @@
 #ifndef PAPERUI_POOL_SPACER
 #define PAPERUI_POOL_SPACER 4
 #endif
+#ifndef PAPERUI_POOL_KEYBOARD
+#define PAPERUI_POOL_KEYBOARD 1
+#endif
+#ifndef PAPERUI_POOL_TEXTAREA
+#define PAPERUI_POOL_TEXTAREA 1
+#endif
+#ifndef PAPERUI_POOL_BATTERY
+#define PAPERUI_POOL_BATTERY 1
+#endif
 
 namespace PaperUI {
 namespace ui {
@@ -63,6 +75,9 @@ struct Pools {
     StaticPool<Row,              PAPERUI_POOL_ROW>      rows;
     StaticPool<Stack,            PAPERUI_POOL_STACK>     stacks;
     StaticPool<Spacer,           PAPERUI_POOL_SPACER>   spacers;
+    StaticPool<KeyboardWidget,   PAPERUI_POOL_KEYBOARD> keyboards;
+    StaticPool<TextAreaWidget,   PAPERUI_POOL_TEXTAREA> textAreas;
+    StaticPool<BatteryWidget,    PAPERUI_POOL_BATTERY>  batteries;
 };
 
 inline Pools& pools() {
@@ -98,6 +113,18 @@ inline CheckboxWidget& checkbox(const char* l) {
 
 inline ProgressBarWidget& progress(int16_t val = 0, int16_t mx = 100) {
     return pools().progressBars.alloc().max(mx).value(val);
+}
+
+inline KeyboardWidget& keyboard() {
+    return pools().keyboards.alloc();
+}
+
+inline TextAreaWidget& textArea() {
+    return pools().textAreas.alloc();
+}
+
+inline BatteryWidget& battery() {
+    return pools().batteries.alloc();
 }
 
 // --- Non-variadic layout factories (zero children) ---
@@ -175,6 +202,9 @@ inline void reset() {
     pools().rows.reset();
     pools().stacks.reset();
     pools().spacers.reset();
+    pools().keyboards.reset();
+    pools().textAreas.reset();
+    pools().batteries.reset();
 }
 
 } // namespace ui

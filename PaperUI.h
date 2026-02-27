@@ -21,6 +21,9 @@
 #include "src/widgets/slider_widget.h"
 #include "src/widgets/checkbox_widget.h"
 #include "src/widgets/progress_bar_widget.h"
+#include "src/widgets/keyboard_widget.h"
+#include "src/widgets/text_area_widget.h"
+#include "src/widgets/battery_widget.h"
 
 // Layouts
 #include "src/layouts/column.h"

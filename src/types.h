@@ -125,5 +125,6 @@ enum class UpdateHint : uint8_t {
 // Callback types (function pointers -- no heap allocation)
 using OnClickCallback  = void (*)(void* user_data);
 using OnChangeCallback = void (*)(void* user_data, int32_t new_value);
+using OnKeyCallback    = void (*)(void* user_data, char key);
 
 } // namespace PaperUI
