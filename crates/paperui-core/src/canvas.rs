@@ -29,6 +29,11 @@ impl MockCanvas {
 }
 
 #[cfg(feature = "mock")]
+impl Default for MockCanvas {
+    fn default() -> Self { Self::new() }
+}
+
+#[cfg(feature = "mock")]
 impl Canvas for MockCanvas {
     fn fill_rect(&mut self, r: Rect, color: Color) {
         let _ = self.ops.push(DrawOp::FillRect(r, color));

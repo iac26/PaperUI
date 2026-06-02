@@ -14,9 +14,8 @@ impl Color {
 
 /// Semantic e-ink refresh-quality hint, set by the theme during draw.
 /// Ordered worst-last so a region can take the max. Non-e-ink renderers ignore it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum UpdateHint { None, Mono, Fast, Text, Quality }
-impl Default for UpdateHint { fn default() -> Self { UpdateHint::Fast } }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum UpdateHint { None, Mono, #[default] Fast, Text, Quality }
 
 /// Opaque font selector resolved by the backend/theme.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
