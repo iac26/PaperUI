@@ -1,0 +1,12 @@
+[package]
+name = "paperui-tft"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+paperui-core = { path = "../paperui-core" }
+paperui-eg = { path = "../paperui-eg" }
+electrolux-ir = { path = "../electrolux-ir" }
+esp-hal = { version = "1.1", features = ["esp32", "unstable"] }
+embedded-graphics = "0.8"
+heapless = "0.8"
