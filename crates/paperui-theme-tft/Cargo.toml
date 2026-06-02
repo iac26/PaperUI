@@ -1,0 +1,11 @@
+[package]
+name = "paperui-theme-tft"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+paperui-core = { path = "../paperui-core" }
+paperui-widgets = { path = "../paperui-widgets" }
+
+[dev-dependencies]
+paperui-core = { path = "../paperui-core", features = ["mock"] }

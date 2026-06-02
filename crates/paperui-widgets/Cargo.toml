@@ -1,0 +1,10 @@
+[package]
+name = "paperui-widgets"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+paperui-core = { path = "../paperui-core" }
+
+[dev-dependencies]
+paperui-core = { path = "../paperui-core", features = ["mock"] }
