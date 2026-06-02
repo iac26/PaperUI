@@ -1,0 +1,8 @@
+[package]
+name = "paperui-eg"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+paperui-core = { path = "../paperui-core" }
+embedded-graphics = "0.8"
