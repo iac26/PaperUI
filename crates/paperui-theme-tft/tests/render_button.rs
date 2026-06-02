@@ -1,0 +1,48 @@
+use paperui_core::{Color, Constraints, DrawCtx, DrawOp, MockCanvas, Rect, Size, UpdateHint, Widget};
+use paperui_widgets::{Button, WidgetTheme};
+use paperui_theme_tft::DefaultTheme;
+
+#[test]
+fn default_theme_measures_button_from_label_plus_padding() {
+    let theme = DefaultTheme;
+    // "OK" = 2 chars * 6px = 12 + 2*8 horizontal padding = 28 wide; 8 + 2*6 = 20 tall.
+    let size = <DefaultTheme as WidgetTheme<MockCanvas>>::measure_button(&theme, "OK", Constraints::new(0, 0, 1000, 1000));
+    assert_eq!(size, Size::new(28, 20));
+}
+
+#[test]
+fn default_theme_draws_button_background_border_and_label() {
+    let theme = DefaultTheme;
+    let mut canvas = MockCanvas::new();
+    let mut hint = UpdateHint::None;
+    let btn = Button::new("OK");
+    let bounds = Rect::new(0, 0, 28, 20);
+    {
+        let mut ctx = DrawCtx::new(&mut canvas, bounds, /*focused*/ false, &mut hint);
+        Widget::<MockCanvas, DefaultTheme>::draw(&btn, &mut ctx, &theme);
+    }
+    // Expect: filled background, a border stroke, then the label text.
+    assert!(matches!(canvas.ops[0], DrawOp::FillRect(_, _)));
+    assert!(matches!(canvas.ops[1], DrawOp::StrokeRect(_, _, _)));
+    assert!(matches!(canvas.ops[2], DrawOp::Text(_, _)));
+    // TFT theme is a color panel: it requests Text-quality (ignored by non-eink).
+    assert_eq!(hint, UpdateHint::Text);
+}
+
+#[test]
+fn focused_button_uses_a_distinct_border_but_same_op_shape() {
+    let theme = DefaultTheme;
+    let mut canvas = MockCanvas::new();
+    let mut hint = UpdateHint::None;
+    let btn = Button::new("OK");
+    {
+        let mut ctx = DrawCtx::new(&mut canvas, Rect::new(0, 0, 28, 20), /*focused*/ true, &mut hint);
+        Widget::<MockCanvas, DefaultTheme>::draw(&btn, &mut ctx, &theme);
+    }
+    if let DrawOp::StrokeRect(_, color, width) = canvas.ops[1] {
+        assert_eq!(width, 2, "focused border is thicker");
+        assert_eq!(color, Color::rgb(0x1E, 0x90, 0xFF));
+    } else {
+        panic!("expected a stroke as op[1]");
+    }
+}

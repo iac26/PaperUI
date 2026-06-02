@@ -9,3 +9,6 @@ paperui-widgets = { path = "../paperui-widgets" }
 
 [dev-dependencies]
 paperui-core = { path = "../paperui-core", features = ["mock"] }
+
+[features]
+mock = ["paperui-core/mock"]
