@@ -16,3 +16,8 @@ pub use canvas::{DrawOp, MockCanvas};
 
 mod state;
 pub use state::State;
+
+mod draw;
+mod widget;
+pub use draw::{DrawCtx, Theme};
+pub use widget::Widget;
