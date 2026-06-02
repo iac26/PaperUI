@@ -1,3 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["crates/paperui-core", "crates/paperui-widgets", "crates/paperui-theme-tft", "crates/electrolux-ir", "crates/paperui-eg", "crates/paperui-tft"]
+members = ["crates/paperui-core", "crates/paperui-widgets", "crates/paperui-theme-tft", "crates/electrolux-ir", "crates/paperui-eg", "crates/paperui-tft", "app/paperui-stickc-remote"]
+
+[profile.release]
+opt-level = "s"
+lto = "fat"

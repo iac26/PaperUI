@@ -3,6 +3,12 @@
 version = 4
 
 [[package]]
+name = "anyhow"
+version = "1.0.102"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13,6 +19,15 @@ name = "az"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b7e4c2464d97fe331d41de9d5db0def0a96f4d823b8b32a2efd503578988973"
+
+[[package]]
+name = "basic-toml"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba62675e8242a4c4e806d12f11d136e626e6c8361d6b829310732241652a178a"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "bitfield"
@@ -329,6 +344,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-hal-bus"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "513e0b3a8fb7d3013a8ae17a834283f170deaf7d0eeab0a7c1a36ad4dd356d22"
+dependencies = [
+ "critical-section",
+ "embedded-hal 1.0.0",
+]
+
+[[package]]
 name = "embedded-io"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -401,13 +426,39 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
+name = "esp-backtrace"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f270a29a3c4e492399b13e157b10151a7616cba69c4d554076ea93ed1bd2916"
+dependencies = [
+ "cfg-if",
+ "esp-config 0.5.0",
+ "esp-println",
+ "heapless 0.8.0",
+ "semihosting",
+]
+
+[[package]]
+name = "esp-config"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "abd4a8db4b72794637a25944bc8d361c3cc271d4f03987ce8741312b6b61529c"
+dependencies = [
+ "document-features",
+ "esp-metadata-generated 0.1.0",
+ "evalexpr",
+ "serde",
+ "serde_yaml",
+]
+
+[[package]]
 name = "esp-config"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4d9b92fd9cfb0b4f8f1b6219b9763269a335571e307b014903b8201619374b80"
 dependencies = [
  "document-features",
- "esp-metadata-generated",
+ "esp-metadata-generated 0.4.0",
  "serde",
  "serde_yaml",
  "somni-expr",
@@ -438,9 +489,9 @@ dependencies = [
  "embedded-io-async 0.6.1",
  "embedded-io-async 0.7.0",
  "enumset",
- "esp-config",
+ "esp-config 0.7.0",
  "esp-hal-procmacros",
- "esp-metadata-generated",
+ "esp-metadata-generated 0.4.0",
  "esp-riscv-rt",
  "esp-rom-sys",
  "esp-sync",
@@ -483,10 +534,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "esp-metadata"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6fbc1d166be84c0750f121e95c8989ddebd7e7bdd86af3594a6cfb34f039650"
+dependencies = [
+ "anyhow",
+ "basic-toml",
+ "indexmap",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "strum",
+]
+
+[[package]]
+name = "esp-metadata-generated"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "189d36b8c8a752bdebec67fd02a15ebb1432feea345553749bca7ce2393cc795"
+dependencies = [
+ "esp-metadata",
+]
+
+[[package]]
 name = "esp-metadata-generated"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42c2ee95b945a4780796e4359e72c033aed3b45073880e8029458f538532db8a"
+
+[[package]]
+name = "esp-println"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e7e3ab41e96093d7fd307e93bfc88bd646a8ff23036ebf809e116b18869f719"
+dependencies = [
+ "critical-section",
+ "document-features",
+ "esp-metadata-generated 0.1.0",
+ "log",
+ "portable-atomic",
+]
 
 [[package]]
 name = "esp-riscv-rt"
@@ -507,7 +595,7 @@ checksum = "eae852ccb08971155023d1371c96d5490cbc26860f06aee2d629ef73f1a890c3"
 dependencies = [
  "cfg-if",
  "document-features",
- "esp-metadata-generated",
+ "esp-metadata-generated 0.4.0",
  "esp32",
 ]
 
@@ -522,7 +610,7 @@ dependencies = [
  "embassy-sync 0.6.2",
  "embassy-sync 0.7.2",
  "embassy-sync 0.8.0",
- "esp-metadata-generated",
+ "esp-metadata-generated 0.4.0",
  "riscv",
  "xtensa-lx",
 ]
@@ -589,6 +677,12 @@ checksum = "8b4b8c4e4d9f187553ecdb7173edec7b2deb2beea106eedefecdb1654b8ee25a"
 dependencies = [
  "vcell",
 ]
+
+[[package]]
+name = "evalexpr"
+version = "12.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae893d2d5e908b78f151ed89de3bfc272cdf6d368c7ed866942f98e24dea208a"
 
 [[package]]
 name = "float-cmp"
@@ -714,6 +808,8 @@ checksum = "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9"
 dependencies = [
  "equivalent",
  "hashbrown",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -757,6 +853,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
+name = "log"
+version = "0.4.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "113b30b4cd05f7c06868fdb2854f66a7b9fece9a48425351cd532e810d74024f"
+
+[[package]]
 name = "memchr"
 version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -767,6 +869,18 @@ name = "micromath"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3c8dda44ff03a2f238717214da50f65d5a53b45cd213a7370424ffdb6fae815"
+
+[[package]]
+name = "mipidsi"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ba34dcbf61182ffa6992b5a4d9b566d5a99df127fd93f6d314213347329e92f"
+dependencies = [
+ "embedded-graphics-core",
+ "embedded-hal 1.0.0",
+ "heapless 0.8.0",
+ "nb 1.1.0",
+]
 
 [[package]]
 name = "nb"
@@ -805,6 +919,24 @@ version = "0.1.0"
 dependencies = [
  "embedded-graphics",
  "paperui-core",
+]
+
+[[package]]
+name = "paperui-stickc-remote"
+version = "0.1.0"
+dependencies = [
+ "electrolux-ir",
+ "embedded-graphics",
+ "embedded-hal-bus",
+ "esp-backtrace",
+ "esp-hal",
+ "esp-println",
+ "mipidsi",
+ "paperui-core",
+ "paperui-eg",
+ "paperui-tft",
+ "paperui-theme-tft",
+ "paperui-widgets",
 ]
 
 [[package]]
@@ -967,6 +1099,12 @@ name = "ryu"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
+
+[[package]]
+name = "semihosting"
+version = "0.1.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8e4abf97879f4e80db69a9fba7bd64998e9bdad25f58ef045a778e191172fd4"
 
 [[package]]
 name = "serde"

@@ -1,0 +1,19 @@
+[package]
+name = "paperui-stickc-remote"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+paperui-core = { path = "../../crates/paperui-core" }
+paperui-widgets = { path = "../../crates/paperui-widgets" }
+paperui-theme-tft = { path = "../../crates/paperui-theme-tft" }
+paperui-eg = { path = "../../crates/paperui-eg" }
+paperui-tft = { path = "../../crates/paperui-tft" }
+electrolux-ir = { path = "../../crates/electrolux-ir" }
+
+esp-hal = { version = "1.1", features = ["esp32", "unstable"] }
+esp-backtrace = { version = "0.17", features = ["esp32", "panic-handler", "println"] }
+esp-println = { version = "0.15", features = ["esp32"] }
+embedded-graphics = "0.8"
+mipidsi = "0.9"
+embedded-hal-bus = "0.3"
