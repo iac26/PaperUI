@@ -26,11 +26,11 @@ cargo +esp build -p paperui-eink -Zbuild-std=core --target xtensa-esp32-none-elf
   4. **`Gray4Canvas::text()`** currently fills glyph cells (correct metrics + ink, not
      letterforms). Replace with an `embedded-graphics` `MonoFont` rasterizer onto the gray
      buffer for readable text.
-  5. **Windowed framebuffer + `present` region cap** — `Gray4Canvas` is a 320×240 window
-     (a full 960×540 one-byte buffer overflows ESP32 internal RAM). The `present` pack
-     buffer holds ≤16384 px/refresh and **silently drops** anything beyond that — so large
-     or full-screen refreshes MUST be chunked into ≤16384-px regions, or moved to a PSRAM
-     framebuffer. Do not assume a single `present` covers the whole panel.
+  5. **Windowed framebuffer** — `Gray4Canvas` is a 320×240 window (a full 960×540
+     one-byte buffer overflows ESP32 internal RAM); a larger panel area needs a PSRAM
+     framebuffer. `present()` itself splits any region into ≤16384-px horizontal bands
+     internally (one `load_image_area` per band, then a single `display_area`), so it no
+     longer drops pixels — but the canvas window still bounds how much you can draw.
   6. **GT911 wiring** — I2C address (default 0x5D), INT/RST pins, and coordinate
      orientation vs. the panel.
 

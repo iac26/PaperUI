@@ -103,6 +103,7 @@ fn main() -> ! {
     let mut ir = IrTx::new(rmt.channel0, p.GPIO19);
     let frame = build_off_frame();
     let pulses = encode_frame(&frame);
+    let mut ir_delay = Delay::new();
 
     // Buttons: active-low, internal pull-ups.
     let in_cfg = InputConfig::default().with_pull(Pull::Up);
@@ -116,7 +117,8 @@ fn main() -> ! {
     loop {
         if let Some((ButtonId::A, ButtonEvent::Click)) = buttons.poll(now_ms) {
             esp_println::println!("BtnA: sending AC OFF");
-            ir.send(&pulses, 2);
+            // Two frames with a ~40 ms inter-frame gap so the AC accepts the repeat.
+            ir.send(&pulses, 2, &mut ir_delay, 40);
         }
         loop_delay.delay_millis(5);
         now_ms = now_ms.wrapping_add(5);

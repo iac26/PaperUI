@@ -121,6 +121,12 @@ where
         self.write_command(CMD_SLEEP);
     }
 
+    /// Standby (lighter low-power state than sleep; faster wake). Provided for
+    /// completeness of the IT8951 power command set.
+    pub fn standby(&mut self) {
+        self.write_command(CMD_STANDBY);
+    }
+
     fn set_target_memory(&mut self, addr: u32) {
         self.write_register(REG_LISAR_H, (addr >> 16) as u16);
         self.write_register(REG_LISAR_L, (addr & 0xFFFF) as u16);
@@ -135,7 +141,13 @@ where
     }
 
     pub fn display_area(&mut self, x: u16, y: u16, w: u16, h: u16, mode: u16) {
-        while self.read_register(REG_LUTAFSR) != 0 {}
+        // Wait for the previous refresh to finish, but bound the spin so a wiring
+        // fault or a wrong busy-register constant can't hang the firmware forever
+        // (matches the bounded `wait_ready`).
+        let mut spins = 0u32;
+        while self.read_register(REG_LUTAFSR) != 0 && spins < 2_000_000 {
+            spins += 1;
+        }
         self.write_command(CMD_DPY_AREA);
         self.write_data(&[x, y, w, h, mode]);
     }

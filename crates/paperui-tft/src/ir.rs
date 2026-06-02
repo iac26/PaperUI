@@ -1,5 +1,6 @@
 //! 38 kHz IR transmit over the ESP32 RMT peripheral, consuming electrolux-ir pulses.
 use electrolux_ir::{Pulse, CARRIER_HZ, PULSE_LEN};
+use embedded_hal::delay::DelayNs;
 use esp_hal::gpio::{Level, OutputPin};
 use esp_hal::rmt::{Channel, PulseCode, TxChannelConfig, TxChannelCreator};
 use esp_hal::Blocking;
@@ -72,8 +73,10 @@ impl<'d> IrTx<'d> {
     }
 
     /// Transmit `pulses` (an even-length mark/space list from electrolux-ir)
-    /// `repeats` times back-to-back.
-    pub fn send(&mut self, pulses: &[Pulse], repeats: u8) {
+    /// `repeats` times, waiting `gap_ms` between consecutive frames. The Electrolux
+    /// receiver needs a real inter-frame gap (~40 ms) to accept the 2nd frame as a
+    /// repeat rather than glitching the two together, so the gap is explicit.
+    pub fn send(&mut self, pulses: &[Pulse], repeats: u8, delay: &mut impl DelayNs, gap_ms: u32) {
         // Pack consecutive pairs of pulses into RMT symbols
         // (level0, dur0, level1, dur1), then append a zero-length end marker.
         let mut data: Vec<PulseCode, SYMBOL_LEN> = Vec::new();
@@ -96,7 +99,10 @@ impl<'d> IrTx<'d> {
         }
         let _ = data.push(PulseCode::end_marker());
 
-        for _ in 0..repeats {
+        for i in 0..repeats {
+            if i > 0 {
+                delay.delay_ms(gap_ms);
+            }
             let channel = match self.channel.take() {
                 Some(ch) => ch,
                 None => return,
