@@ -61,6 +61,12 @@ impl GestureState {
     }
 }
 
+impl Default for GestureState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
