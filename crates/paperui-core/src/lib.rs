@@ -8,3 +8,8 @@ pub use geometry::{Point, Rect, Size};
 
 mod types;
 pub use types::{ButtonEvent, ButtonId, Color, Constraints, FontId, UpdateHint};
+
+mod canvas;
+pub use canvas::{Canvas, FONT0_H, FONT0_W};
+#[cfg(feature = "mock")]
+pub use canvas::{DrawOp, MockCanvas};
