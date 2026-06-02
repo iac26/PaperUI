@@ -13,3 +13,6 @@ mod canvas;
 pub use canvas::{Canvas, FONT0_H, FONT0_W};
 #[cfg(feature = "mock")]
 pub use canvas::{DrawOp, MockCanvas};
+
+mod state;
+pub use state::State;
