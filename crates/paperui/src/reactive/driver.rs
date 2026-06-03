@@ -158,32 +158,29 @@ mod tests {
     }
 
     #[test]
-    fn down_moves_selection_then_scrolls_then_clamps() {
-        let (cx, car, items) = six_carousel();
-        let mut s = Scripted(heapless::Deque::new());
-        for _ in 0..6 { let _ = s.0.push_back(UiEvent::FocusNext); }
-        pump_until_empty(&mut s);
-        assert_eq!(carousel_state(car), (5, 3), "selected clamps at 5, offset at 3");
-        assert_eq!(with_runtime(|rt| rt.focus), Some(items[5]));
-        let _ = s.0.push_back(UiEvent::FocusNext);
-        pump_until_empty(&mut s);
-        assert_eq!(carousel_state(car), (5, 3));
-        cx.dispose();
-    }
-
-    #[test]
-    fn up_navigates_backward_and_clamps_at_zero() {
+    fn down_centers_selection_and_wraps() {
         let (cx, car, items) = six_carousel();
         let mut s = Scripted(heapless::Deque::new());
         for _ in 0..3 { let _ = s.0.push_back(UiEvent::FocusNext); }
         pump_until_empty(&mut s);
-        let _ = s.0.push_back(UiEvent::FocusPrev);
-        let _ = s.0.push_back(UiEvent::FocusPrev);
-        let _ = s.0.push_back(UiEvent::FocusPrev);
-        let _ = s.0.push_back(UiEvent::FocusPrev);
+        // Selection stays centered; offset is the item above it (selected-1, wrapping).
+        assert_eq!(carousel_state(car), (3, 2), "selected=3 centered, top slot=2");
+        assert_eq!(with_runtime(|rt| rt.focus), Some(items[3]));
+        // Six more downs wrap all the way around back to 3.
+        for _ in 0..6 { let _ = s.0.push_back(UiEvent::FocusNext); }
         pump_until_empty(&mut s);
-        assert_eq!(carousel_state(car), (0, 0));
-        assert_eq!(with_runtime(|rt| rt.focus), Some(items[0]));
+        assert_eq!(carousel_state(car).0, 3, "down wraps around the list");
+        cx.dispose();
+    }
+
+    #[test]
+    fn up_navigates_backward_and_wraps() {
+        let (cx, car, items) = six_carousel();
+        let mut s = Scripted(heapless::Deque::new());
+        let _ = s.0.push_back(UiEvent::FocusPrev); // up from first wraps to last
+        pump_until_empty(&mut s);
+        assert_eq!(carousel_state(car), (5, 4), "up from first wraps to last (top slot=4)");
+        assert_eq!(with_runtime(|rt| rt.focus), Some(items[5]));
         cx.dispose();
     }
 }

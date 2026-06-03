@@ -7,7 +7,7 @@ use crate::canvas::Canvas;
 use crate::draw::DrawCtx;
 use crate::geometry::Rect;
 use crate::reactive::layout::{layout, CAROUSEL_ROW_H, CAROUSEL_ROW_PITCH};
-use crate::reactive::node::{window_offset, Kind};
+use crate::reactive::node::Kind;
 use crate::reactive::runtime::{run_effect_of, with_runtime, NodeId};
 use crate::reactive::{ANIM_STEPS, MAX_CHILDREN, TEXT_CAP, VISIBLE};
 use crate::types::UpdateHint;
@@ -54,14 +54,15 @@ fn draw_subtree<C: Canvas, T: WidgetTheme<C>>(node: NodeId, canvas: &mut C, them
     draw_node(node, canvas, theme);
     let children = with_runtime(|rt| match &rt.nodes[node.0 as usize].kind {
         Kind::Column { children, .. } | Kind::Row { children, .. } => Some(children.clone()),
-        Kind::Carousel { children, offset, selected, .. } => {
-            // Recompute the window from selection (identity on a clamped offset) so the rendered
-            // window always agrees with layout, and so window_offset has a non-test use site.
-            let off = window_offset(children.len(), *selected, *offset);
-            let end = (off + VISIBLE).min(children.len());
+        Kind::Carousel { children, offset, .. } => {
+            // Visible window is VISIBLE slots starting at the top index `offset`, wrapping.
+            let off = *offset;
+            let n = children.len();
             let mut v: heapless::Vec<NodeId, MAX_CHILDREN> = heapless::Vec::new();
-            for i in off..end {
-                let _ = v.push(children[i]);
+            if n > 0 {
+                for k in 0..VISIBLE {
+                    let _ = v.push(children[(off + k) % n]);
+                }
             }
             Some(v)
         }
@@ -125,21 +126,26 @@ pub fn render_anim_frame<C: Canvas, T: WidgetTheme<C>>(root: NodeId, canvas: &mu
     });
     let Some((cnode, cb, children, sel, off, frame, dir)) = info else { return; };
     let n = children.len();
+    if n == 0 { return; }
     let slide = dir as i16 * CAROUSEL_ROW_PITCH * frame as i16 / ANIM_STEPS as i16;
 
     canvas.fill_rect(cb, theme.background());
 
-    let lo = (off as i32 + if dir > 0 { -1 } else { 0 }).max(0) as usize;
-    let hi = ((off + VISIBLE) as i32 + if dir > 0 { 0 } else { 1 }).min(n as i32) as usize;
-    for k in lo..hi {
-        let yy = cb.y + (k as i32 - off as i32) as i16 * CAROUSEL_ROW_PITCH + slide;
-        let label = with_runtime(|rt| match &rt.nodes[children[k].0 as usize].kind {
+    // Draw the VISIBLE slots plus one incoming slot (above on down-scroll, below on up-scroll),
+    // each at its slot row shifted by `slide`. Slot indices wrap; the centered (selected) item is
+    // highlighted. `off` is the top-slot index.
+    let (slot_lo, slot_hi): (i32, i32) =
+        if dir > 0 { (-1, VISIBLE as i32) } else { (0, VISIBLE as i32 + 1) };
+    for slot in slot_lo..slot_hi {
+        let idx = (off as i32 + slot).rem_euclid(n as i32) as usize;
+        let yy = cb.y + slot as i16 * CAROUSEL_ROW_PITCH + slide;
+        let label = with_runtime(|rt| match &rt.nodes[children[idx].0 as usize].kind {
             Kind::Button { label, .. } => Some(*label),
             _ => None,
         });
         if let Some(label) = label {
             let mut hint = UpdateHint::default();
-            let mut ctx = DrawCtx::new(canvas, Rect::new(cb.x, yy, cb.w, CAROUSEL_ROW_H), k == sel, &mut hint);
+            let mut ctx = DrawCtx::new(canvas, Rect::new(cb.x, yy, cb.w, CAROUSEL_ROW_H), idx == sel, &mut hint);
             theme.draw_button(&mut ctx, label, false);
         }
     }

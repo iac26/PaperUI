@@ -142,30 +142,28 @@ fn find_carousel(rt: &Runtime) -> Option<NodeId> {
     None
 }
 
-/// Move carousel selection by `delta`, scrolling the window and moving focus. Arms the slide
-/// animation when the window actually scrolls (offset changed). Dirties the visible slots.
+/// Move carousel selection by `delta`, wrapping. The selection always sits in the MIDDLE slot
+/// (centered carousel): `offset` is the index shown in the TOP slot = the item just "above" the
+/// selection. Every press moves the view one row, so every nav arms the slide animation. Dirties
+/// the visible slots.
 fn carousel_nav_inner(rt: &mut Runtime, cnode: NodeId, delta: i32) {
-    let (children, sel, off) = match &rt.nodes[cnode.0 as usize].kind {
-        Kind::Carousel { children, selected, offset, .. } => (children.clone(), *selected, *offset),
+    let (children, sel) = match &rt.nodes[cnode.0 as usize].kind {
+        Kind::Carousel { children, selected, .. } => (children.clone(), *selected),
         _ => return,
     };
     let n = children.len();
     if n == 0 { return; }
-    let new_sel = (sel as i32 + delta).clamp(0, n as i32 - 1) as usize;
-    let new_off = window_offset(n, new_sel, off);
-    let scrolled = new_off != off;
+    let new_sel = (sel as isize + delta as isize).rem_euclid(n as isize) as usize;
+    let new_off = (new_sel + n - 1) % n; // top slot = the item above the centered selection
     if let Kind::Carousel { selected, offset, anim_frame, anim_dir, .. } = &mut rt.nodes[cnode.0 as usize].kind {
         *selected = new_sel;
         *offset = new_off;
-        if scrolled {
-            *anim_frame = ANIM_STEPS;
-            *anim_dir = if delta >= 0 { 1 } else { -1 };
-        }
+        *anim_frame = ANIM_STEPS;
+        *anim_dir = if delta >= 0 { 1 } else { -1 };
     }
     rt.focus = Some(children[new_sel]);
-    let end = (new_off + VISIBLE).min(n);
-    for i in new_off..end {
-        let nid = children[i];
+    for k in 0..VISIBLE {
+        let nid = children[(new_off + k) % n];
         if !rt.dirty.contains(&nid) {
             let _ = rt.dirty.push(nid);
         }
@@ -317,26 +315,16 @@ pub fn carousel_select_first(c: NodeId) {
     with_runtime(|rt| {
         let first = match &mut rt.nodes[c.0 as usize].kind {
             Kind::Carousel { children, selected, offset, .. } => {
+                let n = children.len();
                 *selected = 0;
-                *offset = 0;
+                // `offset` = top-slot index = the item just above the centered selection (wraps).
+                *offset = n.saturating_sub(1);
                 children.first().copied()
             }
             _ => None,
         };
         rt.focus = first;
     });
-}
-
-/// Scroll-to-keep-visible window math: return the offset that keeps `selected` inside the
-/// `VISIBLE`-sized window, clamped to a valid range. Pure (no runtime access) for easy testing.
-pub(crate) fn window_offset(n: usize, selected: usize, offset: usize) -> usize {
-    let mut off = offset;
-    if selected < off {
-        off = selected;
-    } else if selected >= off + VISIBLE {
-        off = selected + 1 - VISIBLE;
-    }
-    off.min(n.saturating_sub(VISIBLE))
 }
 
 #[cfg(test)]
@@ -467,29 +455,23 @@ mod tests {
     }
 
     #[test]
-    fn window_offset_scrolls_to_keep_selected_visible() {
-        assert_eq!(window_offset(6, 0, 0), 0);
-        assert_eq!(window_offset(6, 2, 0), 0);
-        assert_eq!(window_offset(6, 3, 0), 1);
-        assert_eq!(window_offset(6, 5, 1), 3);
-        assert_eq!(window_offset(6, 5, 0), 3);
-        assert_eq!(window_offset(6, 2, 3), 2);
-        assert_eq!(window_offset(6, 0, 3), 0);
-        assert_eq!(window_offset(2, 1, 0), 0);
-    }
-
-    #[test]
-    fn carousel_select_first_sets_focus_to_first_child() {
+    fn carousel_select_first_centers_first_and_focuses_it() {
         let cx = Scope::root();
         let a = button(cx, "a", || {});
-        let car = carousel(cx, &[a, button(cx, "b", || {})]);
+        let car = carousel(cx, &[a, button(cx, "b", || {}), button(cx, "c", || {})]);
         carousel_select_first(car);
-        with_runtime(|rt| assert_eq!(rt.focus, Some(a)));
+        with_runtime(|rt| {
+            assert_eq!(rt.focus, Some(a), "first item is focused (centered)");
+            if let Kind::Carousel { selected, offset, .. } = &rt.nodes[car.0 as usize].kind {
+                assert_eq!(*selected, 0);
+                assert_eq!(*offset, 2, "top slot wraps to the last item (n-1)");
+            }
+        });
         cx.dispose();
     }
 
     #[test]
-    fn scroll_arms_animation_but_in_window_move_does_not() {
+    fn every_nav_centers_selection_and_arms_animation() {
         let cx = Scope::root();
         let items = [
             button(cx, "0", || {}), button(cx, "1", || {}), button(cx, "2", || {}),
@@ -497,19 +479,34 @@ mod tests {
         ];
         let car = carousel(cx, &items);
         carousel_select_first(car);
-        // 0->1: in-window, no animation.
-        nav(1);
-        with_runtime(|rt| if let Kind::Carousel { anim_dir, .. } = &rt.nodes[car.0 as usize].kind {
-            assert_eq!(*anim_dir, 0, "in-window move does not animate");
-        });
-        // 1->2 (in window), 2->3 (scroll -> animate).
-        nav(1);
-        nav(1);
-        with_runtime(|rt| if let Kind::Carousel { anim_dir, anim_frame, .. } = &rt.nodes[car.0 as usize].kind {
-            assert_eq!(*anim_dir, 1, "scroll down arms a forward animation");
+        nav(1); // 0 -> 1
+        with_runtime(|rt| if let Kind::Carousel { selected, offset, anim_dir, anim_frame, .. } = &rt.nodes[car.0 as usize].kind {
+            assert_eq!(*selected, 1, "selection advanced and stays centered");
+            assert_eq!(*offset, 0, "top slot = item above the centered selection");
+            assert_eq!(*anim_dir, 1, "every nav animates");
             assert_eq!(*anim_frame, crate::reactive::ANIM_STEPS);
         });
-        // disarm so this carousel doesn't pollute other tests' animation scans.
+        with_runtime(|rt| assert_eq!(rt.focus, Some(items[1]), "focus follows the centered item"));
+        for _ in 0..=(crate::reactive::ANIM_STEPS as usize) {
+            with_runtime(|rt| step_carousel_anim(rt));
+        }
+        cx.dispose();
+    }
+
+    #[test]
+    fn nav_wraps_at_both_ends() {
+        let cx = Scope::root();
+        let items = [button(cx, "0", || {}), button(cx, "1", || {}), button(cx, "2", || {})];
+        let car = carousel(cx, &items);
+        carousel_select_first(car);
+        nav(-1); // up from first wraps to last
+        with_runtime(|rt| if let Kind::Carousel { selected, .. } = &rt.nodes[car.0 as usize].kind {
+            assert_eq!(*selected, 2, "up from first wraps to last");
+        });
+        nav(1); // down from last wraps to first
+        with_runtime(|rt| if let Kind::Carousel { selected, .. } = &rt.nodes[car.0 as usize].kind {
+            assert_eq!(*selected, 0, "down from last wraps to first");
+        });
         for _ in 0..=(crate::reactive::ANIM_STEPS as usize) {
             with_runtime(|rt| step_carousel_anim(rt));
         }

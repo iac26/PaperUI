@@ -54,17 +54,18 @@ fn measure_inner(rt: &Runtime, node: NodeId) -> Size {
             Size::new(w, h)
         }
         Kind::Carousel { children, offset, .. } => {
+            // Centered carousel: VISIBLE slots are always shown (the window wraps), so height is
+            // fixed at VISIBLE rows; width is the widest visible item.
+            let n = children.len();
             let off = *offset;
-            // Invariant: `offset` is always clamped by window_offset/carousel_select_first. A
-            // stale/corrupt offset would silently measure (0,0) (the node would vanish), so trap
-            // it in debug builds rather than fail quietly.
-            debug_assert!(off <= children.len(), "carousel offset out of bounds");
-            let end = (off + VISIBLE).min(children.len());
+            debug_assert!(n == 0 || off < n, "carousel offset out of bounds");
             let mut w = 0i16;
-            for &c in &children[off..end] {
-                w = w.max(measure_inner(rt, c).w);
+            if n > 0 {
+                for k in 0..VISIBLE {
+                    w = w.max(measure_inner(rt, children[(off + k) % n]).w);
+                }
             }
-            let rows = (end - off) as i16;
+            let rows = VISIBLE as i16;
             let h = rows * CAROUSEL_ROW_H + (rows - 1).max(0) * CAROUSEL_SPACING;
             Size::new(w, h)
         }
@@ -104,14 +105,17 @@ fn place_inner(rt: &mut Runtime, node: NodeId, x: i16, y: i16, w: i16, h: i16) {
     };
     if let Some((children, offset)) = carousel {
         let n = children.len();
-        let end = (offset + VISIBLE).min(n);
-        for (idx, &c) in children.iter().enumerate() {
-            if idx >= offset && idx < end {
-                let row = (idx - offset) as i16;
-                let yy = y + row * CAROUSEL_ROW_PITCH;
-                place_inner(rt, c, x, yy, w, CAROUSEL_ROW_H);
-            } else {
+        if n > 0 {
+            // Hide every child first, then place the VISIBLE window (wraps) into its slots. The
+            // centered selection lands in the middle slot. Hiding first means a child that isn't
+            // currently visible ends up off-screen even though the window wrapped past it.
+            for &c in children.iter() {
                 place_inner(rt, c, x, CAROUSEL_OFFSCREEN_Y, w, CAROUSEL_ROW_H);
+            }
+            for k in 0..VISIBLE {
+                let c = children[(offset + k) % n];
+                let yy = y + k as i16 * CAROUSEL_ROW_PITCH;
+                place_inner(rt, c, x, yy, w, CAROUSEL_ROW_H);
             }
         }
     }
