@@ -2,9 +2,23 @@
 //!
 //! # Safety
 //! The closure is stored in a usize-aligned byte buffer. `new` const-asserts the closure
-//! fits (`size_of` ≤ `W*word`, `align_of` ≤ word). `call`/`drop` reconstruct `*mut F` from
-//! the buffer; this is sound because only a value written by `new::<F>` is ever read, and
-//! the stored `call`/`drop` fn-pointers are monomorphized for that exact `F`.
+//! fits (`size_of` ≤ `W*word`, `align_of` ≤ word) — an oversized/over-aligned closure is a
+//! *compile* error, not a runtime panic. `call`/`drop` reconstruct `*mut F` from the buffer;
+//! this is sound because of two invariants: (1) the buffer is only ever read after `new::<F>`
+//! wrote it, and the closure is never extracted or moved out (there is no such API), so the
+//! `MaybeUninit` is always initialized at `call`/`drop`; (2) the stored `call`/`drop`
+//! fn-pointers are monomorphized for that exact `F`, set in the same `new::<F>` call.
+//!
+//! # Thread-safety
+//! `BoundedFn` auto-derives `Send`/`Sync` (its fields are an array of `MaybeUninit<usize>`
+//! plus two fn-pointers; the closure `F` is type-erased, not a field). This is *intentional
+//! and required*: the reactive `Runtime` stores `BoundedFn`s and lives in a
+//! `static critical_section::Mutex<RefCell<Runtime>>`, which only satisfies `Sync` if its
+//! contents are `Send`. Synchronization is provided by `critical_section::with` (interrupt
+//! masking / cross-core lock), NOT by the type system. Constraint for callers: closures
+//! stored here (effects, handlers) must not capture state that is unsound to touch across
+//! the critical-section boundary — in Layer #1 captures are `Copy` signal handles and
+//! esp-hal peripheral handles, which are `Send`.
 #![allow(unsafe_code)]
 
 use core::mem::{align_of, size_of, MaybeUninit};
@@ -17,8 +31,10 @@ pub struct BoundedFn<const W: usize, R = ()> {
 
 impl<const W: usize, R> BoundedFn<W, R> {
     pub fn new<F: FnMut() -> R>(f: F) -> Self {
-        assert!(size_of::<F>() <= W * size_of::<usize>(), "closure too large for BoundedFn<W>");
-        assert!(align_of::<F>() <= align_of::<usize>(), "closure over-aligned for BoundedFn<W>");
+        // Compile-time (monomorphization-time) guards: an oversized/over-aligned closure
+        // fails the build rather than panicking at runtime — important on embedded.
+        const { assert!(size_of::<F>() <= W * size_of::<usize>(), "closure too large for BoundedFn<W>") };
+        const { assert!(align_of::<F>() <= align_of::<usize>(), "closure over-aligned for BoundedFn<W>") };
 
         let mut storage = [MaybeUninit::<usize>::uninit(); W];
         // SAFETY: buffer is usize-aligned and large enough (asserted above).
@@ -73,17 +89,18 @@ mod tests {
 
     #[test]
     fn runs_drop_on_owned_capture() {
-        struct Bomb<'a>(&'a Cell<bool>);
+        // A counter (not a bool) proves drop runs EXACTLY once, catching a double-drop regression.
+        struct Bomb<'a>(&'a Cell<u32>);
         impl Drop for Bomb<'_> {
-            fn drop(&mut self) { self.0.set(true); }
+            fn drop(&mut self) { self.0.set(self.0.get() + 1); }
         }
-        let flag = Cell::new(false);
+        let drops = Cell::new(0u32);
         {
-            let bomb = Bomb(&flag);
+            let bomb = Bomb(&drops);
             // `move` makes the closure OWN `bomb`; referencing its field forces the capture.
             let _f = BoundedFn::<4, ()>::new(move || { let _ = bomb.0; });
-            assert!(!flag.get(), "captured Bomb must not drop while the BoundedFn is alive");
-        } // _f drops here -> drop_fn -> drops the closure -> drops `bomb` -> sets flag
-        assert!(flag.get(), "dropping the BoundedFn must drop the captured Bomb exactly once");
+            assert_eq!(drops.get(), 0, "captured Bomb must not drop while the BoundedFn is alive");
+        } // _f drops here -> drop_fn -> drops the closure -> drops `bomb` -> increments counter
+        assert_eq!(drops.get(), 1, "dropping the BoundedFn must drop the captured Bomb exactly once");
     }
 }
