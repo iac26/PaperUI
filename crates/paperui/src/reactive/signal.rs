@@ -94,8 +94,17 @@ mod value_cell {
     use crate::reactive::runtime::{Runtime, SignalId};
 
     pub(super) fn write_value<T: Copy + 'static>(rt: &mut Runtime, id: SignalId, v: T) {
+        // Enforce the type-match invariant the # Safety rationale relies on: the slot must
+        // already be tagged with T's TypeId (set by `alloc_signal`). Catches a stale handle
+        // or a wrong-T access in debug builds before it can reinterpret bytes.
+        debug_assert_eq!(
+            rt.signals[id.0 as usize].type_id,
+            Some(core::any::TypeId::of::<T>()),
+            "signal slot type mismatch on write (stale handle or wrong T)"
+        );
         let slot = &mut rt.signals[id.0 as usize].value;
-        // SAFETY: slot is usize-aligned and large enough for T (asserted in alloc_in).
+        // SAFETY: slot is usize-aligned and large enough for T (asserted in alloc_in), and the
+        // slot is tagged with T's type (asserted above), so this writes a correctly-typed cell.
         unsafe {
             let dst = slot.as_mut_ptr() as *mut T;
             dst.write(v);
@@ -103,8 +112,15 @@ mod value_cell {
     }
 
     pub(super) fn read_value<T: Copy + 'static>(rt: &Runtime, id: SignalId) -> T {
+        // Same type-match invariant as write_value: only read a slot tagged with T's TypeId.
+        debug_assert_eq!(
+            rt.signals[id.0 as usize].type_id,
+            Some(core::any::TypeId::of::<T>()),
+            "signal slot type mismatch on read (stale handle or wrong T)"
+        );
         let slot = &rt.signals[id.0 as usize].value;
-        // SAFETY: a T was written here by write_value::<T>; T: Copy makes the read sound.
+        // SAFETY: a T was written here by write_value::<T> into a same-typed slot (asserted
+        // above); T: Copy makes the bitwise read sound.
         unsafe {
             let src = slot.as_ptr() as *const T;
             src.read()
