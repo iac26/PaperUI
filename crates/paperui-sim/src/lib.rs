@@ -11,3 +11,6 @@ mod config;
 pub use config::SimConfig;
 
 mod input_map;
+
+mod run;
+pub use run::run_sim;
