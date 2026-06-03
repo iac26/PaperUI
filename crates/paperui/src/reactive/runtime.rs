@@ -1,7 +1,9 @@
 //! The single global owner of all reactive storage. Accessed via `with_runtime`, which
 //! takes ONE non-reentrant critical section. Never call `with_runtime` from inside another.
 
-use crate::reactive::{FANOUT, N_NODES, N_OWNERS, N_SIGNALS, SIGNAL_SLOT_WORDS};
+use crate::reactive::bounded_fn::BoundedFn;
+use crate::reactive::node::Node;
+use crate::reactive::{CLOSURE_WORDS, FANOUT, N_EFFECTS, N_NODES, N_OWNERS, N_SIGNALS, SIGNAL_SLOT_WORDS};
 use core::cell::RefCell;
 use core::mem::MaybeUninit;
 use critical_section::Mutex;
@@ -25,6 +27,15 @@ pub(crate) struct SignalSlot {
     pub in_use: bool,
 }
 
+#[allow(dead_code)] // `func` is write-only here; alloc_effect (Task 7) fully exercises it.
+pub(crate) struct EffectSlot {
+    pub func: Option<BoundedFn<CLOSURE_WORDS, ()>>,
+    pub owner: OwnerId,
+    pub in_use: bool,
+}
+
+const EMPTY_EFFECT: EffectSlot = EffectSlot { func: None, owner: OwnerId(0), in_use: false };
+
 #[allow(dead_code)]
 pub(crate) struct Runtime {
     pub signals: [SignalSlot; N_SIGNALS],
@@ -32,7 +43,8 @@ pub(crate) struct Runtime {
     pub current_effect: Option<NodeId>,
     pub dirty: Vec<NodeId, N_NODES>,
     pub epoch: u32,
-    // node/effect arenas added in later tasks
+    pub nodes: Vec<Node, N_NODES>,
+    pub effects: [EffectSlot; N_EFFECTS],
 }
 
 #[allow(dead_code)]
@@ -51,6 +63,8 @@ static RUNTIME: Mutex<RefCell<Runtime>> = Mutex::new(RefCell::new(Runtime {
     current_effect: None,
     dirty: Vec::new(),
     epoch: 0,
+    nodes: Vec::new(),
+    effects: [EMPTY_EFFECT; N_EFFECTS],
 }));
 
 /// Run `f` with exclusive access to the runtime. NON-REENTRANT: never nest.
@@ -76,7 +90,6 @@ impl Runtime {
     }
 
     pub(crate) fn free_owner(&mut self, o: OwnerId) {
-        // free signals owned by this owner
         for s in self.signals.iter_mut() {
             if s.in_use && s.owner == o {
                 s.in_use = false;
@@ -84,7 +97,17 @@ impl Runtime {
                 s.type_id = None;
             }
         }
+        for e in self.effects.iter_mut() {
+            if e.in_use && e.owner == o {
+                e.in_use = false;
+                e.func = None;
+            }
+        }
         self.owners_used[o.0 as usize] = false;
+        // NOTE: nodes are intentionally NOT removed. NodeId is an index into the `nodes`
+        // Vec; removing a node would shift later indices and corrupt every other NodeId.
+        // Layer #1 builds the tree once and runs forever, so append-only is correct here;
+        // node reclamation across screens is a Layer #2 (navigation) concern.
     }
 }
 
@@ -93,6 +116,14 @@ pub(crate) struct TypeIdShim(pub core::any::TypeId);
 
 #[allow(dead_code)]
 impl Runtime {
+    pub(crate) fn push_node(&mut self, node: Node) -> NodeId {
+        let id = NodeId(self.nodes.len() as u16);
+        if self.nodes.push(node).is_err() {
+            debug_assert!(false, "node arena exhausted (raise N_NODES)");
+        }
+        id
+    }
+
     pub(crate) fn alloc_signal(&mut self, owner: OwnerId, tid: TypeIdShim) -> SignalId {
         for (i, s) in self.signals.iter_mut().enumerate() {
             if !s.in_use {
