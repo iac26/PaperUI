@@ -10,6 +10,8 @@ pub const N_OWNERS: usize = 16;
 pub const FANOUT: usize = 4;
 pub const MAX_CHILDREN: usize = 8;
 pub const TEXT_CAP: usize = 32;
+pub const VISIBLE: usize = 3;
+pub const ANIM_STEPS: u8 = 3;
 pub const SIGNAL_SLOT_WORDS: usize = 2;
 pub const CLOSURE_WORDS: usize = 8;
 
@@ -28,7 +30,7 @@ mod scope;
 pub use scope::{use_state, Scope};
 
 mod node;
-pub use node::{button, col, row, text, text_static, IntoChildren, Kind, Node, TextSource};
+pub use node::{button, carousel, carousel_select_first, col, row, text, text_static, IntoChildren, Kind, Node, TextSource};
 
 mod layout;
 pub use layout::layout;

@@ -3,7 +3,7 @@
 use crate::geometry::{Point, Rect};
 use crate::reactive::runtime::{with_runtime, EffectId, NodeId, OwnerId, Runtime};
 use crate::reactive::scope::Scope;
-use crate::reactive::{MAX_CHILDREN, TEXT_CAP};
+use crate::reactive::{MAX_CHILDREN, TEXT_CAP, VISIBLE};
 use heapless::Vec;
 
 /// Mark a node dirty (idempotent). Used when focus moves so the affected buttons repaint.
@@ -53,6 +53,7 @@ pub enum Kind {
     Button { label: &'static str, on_press: EffectId, pressed: bool },
     Column { children: Vec<NodeId, MAX_CHILDREN>, spacing: i16 },
     Row { children: Vec<NodeId, MAX_CHILDREN>, spacing: i16 },
+    Carousel { children: Vec<NodeId, MAX_CHILDREN>, selected: usize, offset: usize, anim_frame: u8, anim_dir: i8 },
 }
 
 #[derive(Clone)]
@@ -206,6 +207,47 @@ pub fn row(cx: Scope, children: impl IntoChildren) -> NodeId {
     })
 }
 
+pub fn carousel(cx: Scope, items: &[NodeId]) -> NodeId {
+    let mut children: Vec<NodeId, MAX_CHILDREN> = Vec::new();
+    for &it in items {
+        let _ = children.push(it); // truncates past MAX_CHILDREN; acceptable for Layer #1
+    }
+    with_runtime(|rt| {
+        rt.push_node(Node {
+            kind: Kind::Carousel { children, selected: 0, offset: 0, anim_frame: 0, anim_dir: 0 },
+            bounds: Rect::new(0, 0, 0, 0),
+            owner: cx.owner,
+        })
+    })
+}
+
+/// Reset a carousel to its first item and focus it (call once after building the tree).
+pub fn carousel_select_first(c: NodeId) {
+    with_runtime(|rt| {
+        let first = match &mut rt.nodes[c.0 as usize].kind {
+            Kind::Carousel { children, selected, offset, .. } => {
+                *selected = 0;
+                *offset = 0;
+                children.first().copied()
+            }
+            _ => None,
+        };
+        rt.focus = first;
+    });
+}
+
+/// Scroll-to-keep-visible window math: return the offset that keeps `selected` inside the
+/// `VISIBLE`-sized window, clamped to a valid range. Pure (no runtime access) for easy testing.
+pub(crate) fn window_offset(n: usize, selected: usize, offset: usize) -> usize {
+    let mut off = offset;
+    if selected < off {
+        off = selected;
+    } else if selected >= off + VISIBLE {
+        off = selected + 1 - VISIBLE;
+    }
+    off.min(n.saturating_sub(VISIBLE))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -312,6 +354,46 @@ mod tests {
             assert!(rt.dirty.contains(&b0), "old focus repaints");
             assert!(rt.dirty.contains(&b1), "new focus repaints");
         });
+        cx.dispose();
+    }
+
+    #[test]
+    fn carousel_holds_children_and_starts_at_zero() {
+        let cx = Scope::root();
+        let items = [
+            button(cx, "a", || {}), button(cx, "b", || {}), button(cx, "c", || {}),
+            button(cx, "d", || {}),
+        ];
+        let car = carousel(cx, &items);
+        with_runtime(|rt| match &rt.nodes[car.0 as usize].kind {
+            Kind::Carousel { children, selected, offset, anim_frame, anim_dir } => {
+                assert_eq!(children.len(), 4);
+                assert_eq!((*selected, *offset, *anim_frame, *anim_dir), (0, 0, 0, 0));
+            }
+            _ => panic!("expected a carousel"),
+        });
+        cx.dispose();
+    }
+
+    #[test]
+    fn window_offset_scrolls_to_keep_selected_visible() {
+        assert_eq!(window_offset(6, 0, 0), 0);
+        assert_eq!(window_offset(6, 2, 0), 0);
+        assert_eq!(window_offset(6, 3, 0), 1);
+        assert_eq!(window_offset(6, 5, 1), 3);
+        assert_eq!(window_offset(6, 5, 0), 3);
+        assert_eq!(window_offset(6, 2, 3), 2);
+        assert_eq!(window_offset(6, 0, 3), 0);
+        assert_eq!(window_offset(2, 1, 0), 0);
+    }
+
+    #[test]
+    fn carousel_select_first_sets_focus_to_first_child() {
+        let cx = Scope::root();
+        let a = button(cx, "a", || {});
+        let car = carousel(cx, &[a, button(cx, "b", || {})]);
+        carousel_select_first(car);
+        with_runtime(|rt| assert_eq!(rt.focus, Some(a)));
         cx.dispose();
     }
 }
