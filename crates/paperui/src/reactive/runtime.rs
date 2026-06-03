@@ -85,6 +85,26 @@ impl Runtime {
     }
 }
 
+/// A `TypeId` wrapper so `signal.rs` can hand the stored type into `alloc_signal`.
+pub(crate) struct TypeIdShim(pub core::any::TypeId);
+
+#[allow(dead_code)]
+impl Runtime {
+    pub(crate) fn alloc_signal(&mut self, owner: OwnerId, tid: TypeIdShim) -> SignalId {
+        for (i, s) in self.signals.iter_mut().enumerate() {
+            if !s.in_use {
+                s.in_use = true;
+                s.owner = owner;
+                s.type_id = Some(tid.0);
+                s.subs.clear();
+                return SignalId(i as u16);
+            }
+        }
+        debug_assert!(false, "signal arena exhausted (raise N_SIGNALS)");
+        SignalId((N_SIGNALS - 1) as u16)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

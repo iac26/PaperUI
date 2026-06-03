@@ -20,3 +20,6 @@ mod runtime;
 pub use runtime::{EffectId, NodeId, OwnerId, SignalId};
 #[allow(unused_imports)]
 pub(crate) use runtime::with_runtime;
+
+mod signal;
+pub use signal::{ReactiveValue, Signal};
