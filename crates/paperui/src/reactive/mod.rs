@@ -1,6 +1,6 @@
 //! Layer #1 reactive core: signals + scopes + node tree + sync driver. `no_std`, zero-heap.
 //! See docs/superpowers/specs/2026-06-03-paperui-reactive-core-design.md.
-#![forbid(unsafe_code)] // bounded_fn.rs re-enables unsafe locally.
+#![deny(unsafe_code)] // bounded_fn.rs re-enables unsafe locally via #![allow]. (deny, not forbid — forbid can't be overridden.)
 
 // --- compile-time capacities (override via patching these consts) ---
 pub const N_SIGNALS: usize = 32;
