@@ -1,0 +1,16 @@
+[package]
+name = "paperui-sim"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+paperui = { path = "../paperui", features = ["reactive", "eg"] }
+embedded-graphics = "0.8"
+embedded-graphics-simulator = "0.7"
+# Selects a host implementation for the critical-section used by paperui's reactive runtime.
+critical-section = { version = "1.2", features = ["std"] }
+
+[dev-dependencies]
+# The StickC theme (no esp-hal) for the preview example.
+paperui-tft = { path = "../paperui-tft", default-features = false }
+heapless = "0.8"
