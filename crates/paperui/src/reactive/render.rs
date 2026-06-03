@@ -36,7 +36,7 @@ fn snapshot(node: NodeId) -> Draw {
             Kind::Button { label, pressed, .. } => {
                 Draw::Button { bounds: n.bounds, label, pressed: *pressed, focused }
             }
-            Kind::Column { .. } | Kind::Row { .. } => Draw::Container,
+            Kind::Column { .. } | Kind::Row { .. } | Kind::Carousel { .. } => Draw::Container,
         }
     })
 }
@@ -59,7 +59,7 @@ fn draw_node<C: Canvas, T: WidgetTheme<C>>(node: NodeId, canvas: &mut C, theme: 
 fn draw_subtree<C: Canvas, T: WidgetTheme<C>>(node: NodeId, canvas: &mut C, theme: &T) {
     draw_node(node, canvas, theme);
     let children = with_runtime(|rt| match &rt.nodes[node.0 as usize].kind {
-        Kind::Column { children, .. } | Kind::Row { children, .. } => Some(children.clone()),
+        Kind::Column { children, .. } | Kind::Row { children, .. } | Kind::Carousel { children, .. } => Some(children.clone()),
         _ => None,
     });
     if let Some(children) = children {

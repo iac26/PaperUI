@@ -48,6 +48,7 @@ fn measure_inner(rt: &Runtime, node: NodeId) -> Size {
             }
             Size::new(w, h)
         }
+        Kind::Carousel { .. } => Size::new(0, 0), // layout handled by Task 3
     }
 }
 
