@@ -43,7 +43,7 @@ fn focused_button_uses_a_distinct_border_but_same_op_shape() {
     }
     if let DrawOp::StrokeRect(_, color, width) = canvas.ops[1] {
         assert_eq!(width, 2, "focused border is thicker");
-        assert_eq!(color, Color::rgb(0x1E, 0x90, 0xFF));
+        assert_eq!(color, Color::rgb(0xFF, 0x80, 0x00), "focused border is orange accent");
     } else {
         panic!("expected a stroke as op[1]");
     }

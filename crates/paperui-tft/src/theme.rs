@@ -1,4 +1,4 @@
-//! The TFT (full-color) theme — this board addon's default look.
+//! The TFT (full-color) theme — this board addon's default look: black wallpaper, orange highlight.
 use paperui::{
     Canvas, Color, Constraints, DrawCtx, FontId, Point, Size, Theme, UpdateHint, WidgetTheme,
     FONT0_H, FONT0_W,
@@ -6,13 +6,14 @@ use paperui::{
 
 const PAD_X: i16 = 8;
 const PAD_Y: i16 = 6;
-const BG: Color = Color::rgb(0xE0, 0xE0, 0xE0);
-const BG_PRESSED: Color = Color::rgb(0xA0, 0xA0, 0xA0);
-const BORDER: Color = Color::rgb(0x40, 0x40, 0x40);
-const BORDER_FOCUS: Color = Color::rgb(0x1E, 0x90, 0xFF);
-const LABEL: Color = Color::BLACK;
+const BG: Color = Color::BLACK;
+const BTN_FILL: Color = Color::rgb(0x20, 0x20, 0x20);
+const BTN_FILL_PRESSED: Color = Color::rgb(0x40, 0x40, 0x40);
+const BORDER: Color = Color::rgb(0x60, 0x60, 0x60);
+const ACCENT: Color = Color::rgb(0xFF, 0x80, 0x00); // orange highlight
+const LABEL: Color = Color::rgb(0xE0, 0xE0, 0xE0);
 
-/// The full-color TFT look. Stateless singleton — holds no data.
+/// The full-color TFT look: black wallpaper, orange highlight on the focused control.
 pub struct TftTheme;
 impl Theme for TftTheme {}
 
@@ -26,11 +27,20 @@ impl<C: Canvas> WidgetTheme<C> for TftTheme {
     fn draw_button(&self, ctx: &mut DrawCtx<C>, label: &str, pressed: bool) {
         ctx.require_hint(UpdateHint::Text);
         let b = ctx.bounds;
-        ctx.canvas.fill_rect(b, if pressed { BG_PRESSED } else { BG });
-        let (border, width) = if ctx.focused { (BORDER_FOCUS, 2) } else { (BORDER, 1) };
+        ctx.canvas.fill_rect(b, if pressed { BTN_FILL_PRESSED } else { BTN_FILL });
+        let (border, width, label_color) = if ctx.focused {
+            (ACCENT, 2, ACCENT)
+        } else {
+            (BORDER, 1, LABEL)
+        };
         ctx.canvas.stroke_rect(b, border, width);
-        let tx = b.x + PAD_X;
-        let ty = b.y + PAD_Y;
-        ctx.canvas.text(Point::new(tx, ty), label, FontId(0), LABEL);
+        ctx.canvas.text(Point::new(b.x + PAD_X, b.y + PAD_Y), label, FontId(0), label_color);
+    }
+
+    fn background(&self) -> Color { BG }
+
+    fn draw_text(&self, ctx: &mut DrawCtx<C>, s: &str) {
+        ctx.canvas.fill_rect(ctx.bounds, BG);
+        ctx.canvas.text(Point::new(ctx.bounds.x + 6, ctx.bounds.y + 6), s, FontId(0), LABEL);
     }
 }
