@@ -37,4 +37,4 @@ mod render;
 pub use render::{render_frame, render_frame_full};
 
 mod driver;
-pub use driver::{run, EventSource, UiEvent};
+pub use driver::{dispatch, has_dirty, run, EventSource, UiEvent};

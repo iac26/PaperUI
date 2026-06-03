@@ -3,7 +3,8 @@
 //! without touching the engine. Layer #1 is intentionally blocking.
 
 use crate::canvas::Canvas;
-use crate::reactive::node::{focus_next, invoke_handler_of_focus};
+use crate::geometry::Point;
+use crate::reactive::node::{focus_next, invoke_handler_at, invoke_handler_of_focus};
 use crate::reactive::render::{render_frame, render_frame_full};
 use crate::reactive::runtime::{with_runtime, NodeId};
 use crate::widget_theme::WidgetTheme;
@@ -12,6 +13,7 @@ use crate::widget_theme::WidgetTheme;
 pub enum UiEvent {
     FocusNext,
     Activate,
+    Pointer(Point),
 }
 
 /// A source of UI events (buttons, touch, …). `now_ms` is a monotonic-ish millisecond clock
@@ -20,11 +22,20 @@ pub trait EventSource {
     fn poll(&mut self, now_ms: u32) -> Option<UiEvent>;
 }
 
-fn dispatch(ev: UiEvent) {
+/// Route a UI event into the reactive core. Public so an external driver (e.g. the desktop
+/// `paperui-sim` backend) can dispatch events it pumped from a window.
+pub fn dispatch(ev: UiEvent) {
     match ev {
         UiEvent::FocusNext => focus_next(),
         UiEvent::Activate => invoke_handler_of_focus(),
+        UiEvent::Pointer(p) => invoke_handler_at(p),
     }
+}
+
+/// True when at least one node is marked dirty and a `render_frame` is pending. Lets an
+/// external loop render only when there is work to do (`dirty` is private to the runtime).
+pub fn has_dirty() -> bool {
+    with_runtime(|rt| !rt.dirty.is_empty())
 }
 
 /// The synchronous app loop. Never returns. Renders once, then polls the source, dispatches
@@ -44,8 +55,7 @@ where
         while let Some(ev) = src.poll(now_ms) {
             dispatch(ev);
         }
-        let has_dirty = with_runtime(|rt| !rt.dirty.is_empty());
-        if has_dirty {
+        if has_dirty() {
             render_frame(root, canvas, theme);
         }
         now_ms = now_ms.wrapping_add(5);
@@ -62,8 +72,9 @@ pub(crate) fn pump_until_empty(src: &mut impl EventSource) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reactive::node::{button, col, text_static};
+    use crate::reactive::node::{button, col, text, text_static};
     use crate::reactive::scope::Scope;
+    use crate::geometry::{Point, Rect};
 
     struct Scripted(heapless::Deque<UiEvent, 8>);
     impl EventSource for Scripted {
@@ -89,6 +100,33 @@ mod tests {
         let mut src = Scripted(ev);
         pump_until_empty(&mut src);
         assert_eq!(count.get(), 1, "FocusNext onto the button, then Activate, runs its handler");
+        cx.dispose();
+    }
+
+    #[test]
+    fn dispatch_pointer_activates_the_button_under_the_point() {
+        let cx = Scope::root();
+        let count = cx.signal(0i32);
+        let b = button(cx, "+", move || count.update(|c| *c += 1));
+        with_runtime(|rt| rt.nodes[b.0 as usize].bounds = Rect::new(3000, 3000, 40, 20));
+        dispatch(UiEvent::Pointer(Point::new(3010, 3010)));
+        assert_eq!(count.get(), 1, "Pointer routes to invoke_handler_at");
+        cx.dispose();
+    }
+
+    #[test]
+    fn has_dirty_tracks_pending_work() {
+        let cx = Scope::root();
+        let count = cx.signal(0i32);
+        let _t = text(cx, move || {
+            let mut s = heapless::String::<32>::new();
+            let _ = core::fmt::write(&mut s, format_args!("{}", count.get()));
+            s
+        });
+        with_runtime(|rt| rt.dirty.clear());
+        assert!(!has_dirty(), "no work pending right after a clear");
+        count.set(1);
+        assert!(has_dirty(), "a signal change dirties its subscriber");
         cx.dispose();
     }
 }
