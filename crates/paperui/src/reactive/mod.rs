@@ -1,0 +1,17 @@
+//! Layer #1 reactive core: signals + scopes + node tree + sync driver. `no_std`, zero-heap.
+//! See docs/superpowers/specs/2026-06-03-paperui-reactive-core-design.md.
+#![forbid(unsafe_code)] // bounded_fn.rs re-enables unsafe locally.
+
+// --- compile-time capacities (override via patching these consts) ---
+pub const N_SIGNALS: usize = 32;
+pub const N_NODES: usize = 64;
+pub const N_EFFECTS: usize = 32;
+pub const N_OWNERS: usize = 16;
+pub const FANOUT: usize = 4;
+pub const MAX_CHILDREN: usize = 8;
+pub const TEXT_CAP: usize = 32;
+pub const SIGNAL_SLOT_WORDS: usize = 2;
+pub const CLOSURE_WORDS: usize = 8;
+
+mod bounded_fn;
+pub use bounded_fn::BoundedFn;

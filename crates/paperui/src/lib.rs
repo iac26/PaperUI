@@ -27,6 +27,9 @@ mod widget_theme;
 // --- optional embedded-graphics adapter ---
 #[cfg(feature = "eg")]
 mod eg;
+// --- optional reactive core (signals + scopes + node tree + sync driver) ---
+#[cfg(feature = "reactive")]
+pub mod reactive;
 
 pub use canvas::{Canvas, FONT0_H, FONT0_W};
 #[cfg(feature = "mock")]

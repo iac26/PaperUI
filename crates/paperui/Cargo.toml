@@ -6,9 +6,15 @@ edition = "2021"
 [dependencies]
 heapless = "0.8"
 embedded-graphics = { version = "0.8", optional = true }
+critical-section = { version = "1.2", optional = true }
+
+[dev-dependencies]
+critical-section = { version = "1.2", features = ["std"] }
 
 [features]
-# `eg`   — the Canvas -> embedded-graphics DrawTarget adapter (pulls embedded-graphics).
-# `mock` — a recording mock Canvas + draw-op log, for host tests.
+# `eg`       — the Canvas -> embedded-graphics DrawTarget adapter (pulls embedded-graphics).
+# `mock`     — a recording mock Canvas + draw-op log, for host tests.
+# `reactive` — Layer #1 reactive core: signals + scopes + node tree + sync driver.
 eg = ["dep:embedded-graphics"]
 mock = []
+reactive = ["dep:critical-section"]

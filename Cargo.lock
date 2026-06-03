@@ -800,6 +800,7 @@ dependencies = [
 name = "paperui"
 version = "0.1.0"
 dependencies = [
+ "critical-section",
  "embedded-graphics",
  "heapless 0.8.0",
 ]
