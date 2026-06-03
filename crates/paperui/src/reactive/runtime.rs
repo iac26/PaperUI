@@ -18,7 +18,6 @@ pub struct EffectId(pub u16);
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct NodeId(pub u16);
 
-#[allow(dead_code)]
 pub(crate) struct SignalSlot {
     pub value: [MaybeUninit<usize>; SIGNAL_SLOT_WORDS],
     pub type_id: Option<core::any::TypeId>,
@@ -35,7 +34,6 @@ pub(crate) struct EffectSlot {
 
 const EMPTY_EFFECT: EffectSlot = EffectSlot { func: None, owner: OwnerId(0), in_use: false };
 
-#[allow(dead_code)]
 pub(crate) struct Runtime {
     pub signals: [SignalSlot; N_SIGNALS],
     pub owners_used: [bool; N_OWNERS],
@@ -47,7 +45,6 @@ pub(crate) struct Runtime {
     pub effects: [EffectSlot; N_EFFECTS],
 }
 
-#[allow(dead_code)]
 const EMPTY_SIGNAL: SignalSlot = SignalSlot {
     value: [MaybeUninit::uninit(); SIGNAL_SLOT_WORDS],
     type_id: None,
@@ -56,7 +53,6 @@ const EMPTY_SIGNAL: SignalSlot = SignalSlot {
     in_use: false,
 };
 
-#[allow(dead_code)]
 static RUNTIME: Mutex<RefCell<Runtime>> = Mutex::new(RefCell::new(Runtime {
     signals: [EMPTY_SIGNAL; N_SIGNALS],
     owners_used: [false; N_OWNERS],
@@ -69,12 +65,10 @@ static RUNTIME: Mutex<RefCell<Runtime>> = Mutex::new(RefCell::new(Runtime {
 }));
 
 /// Run `f` with exclusive access to the runtime. NON-REENTRANT: never nest.
-#[allow(dead_code)]
 pub(crate) fn with_runtime<R>(f: impl FnOnce(&mut Runtime) -> R) -> R {
     critical_section::with(|cs| f(&mut RUNTIME.borrow_ref_mut(cs)))
 }
 
-#[allow(dead_code)]
 impl Runtime {
     pub(crate) fn alloc_owner(&mut self) -> OwnerId {
         // OwnerId(0) is reserved as a sentinel "no real owner" (the EMPTY_SIGNAL placeholder
@@ -121,7 +115,6 @@ impl Runtime {
 /// A `TypeId` wrapper so `signal.rs` can hand the stored type into `alloc_signal`.
 pub(crate) struct TypeIdShim(pub core::any::TypeId);
 
-#[allow(dead_code)]
 impl Runtime {
     pub(crate) fn push_node(&mut self, node: Node) -> NodeId {
         let id = NodeId(self.nodes.len() as u16);
@@ -146,7 +139,6 @@ impl Runtime {
     }
 }
 
-#[allow(dead_code)]
 impl Runtime {
     pub(crate) fn alloc_effect(&mut self, owner: OwnerId, f: BoundedFn<CLOSURE_WORDS, ()>) -> EffectId {
         for (i, e) in self.effects.iter_mut().enumerate() {

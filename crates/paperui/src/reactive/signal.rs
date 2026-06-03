@@ -16,7 +16,6 @@ pub struct Signal<T> {
     pub(crate) _pd: PhantomData<T>,
 }
 
-#[allow(dead_code)]
 impl<T: ReactiveValue> Signal<T> {
     pub(crate) fn alloc_in(rt: &mut Runtime, owner: OwnerId, init: T) -> Self {
         // Compile-time guards: payload must fit the slot in BOTH size and alignment.
