@@ -6,3 +6,6 @@
 //!
 //! Run the demo:
 //! `cargo run -p paperui-sim --example stickc_demo --target x86_64-unknown-linux-gnu`
+
+mod config;
+pub use config::SimConfig;
