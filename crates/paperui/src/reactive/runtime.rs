@@ -2,7 +2,7 @@
 //! takes ONE non-reentrant critical section. Never call `with_runtime` from inside another.
 
 use crate::reactive::bounded_fn::BoundedFn;
-use crate::reactive::node::Node;
+use crate::reactive::node::{effect_of_text, handler_of_button, Node};
 use crate::reactive::{CLOSURE_WORDS, FANOUT, N_EFFECTS, N_NODES, N_OWNERS, N_SIGNALS, SIGNAL_SLOT_WORDS};
 use core::cell::RefCell;
 use core::mem::MaybeUninit;
@@ -136,6 +136,52 @@ impl Runtime {
         }
         debug_assert!(false, "signal arena exhausted (raise N_SIGNALS)");
         SignalId((N_SIGNALS - 1) as u16)
+    }
+}
+
+#[allow(dead_code)]
+impl Runtime {
+    pub(crate) fn alloc_effect(&mut self, owner: OwnerId, f: BoundedFn<CLOSURE_WORDS, ()>) -> EffectId {
+        for (i, e) in self.effects.iter_mut().enumerate() {
+            if !e.in_use {
+                e.in_use = true;
+                e.owner = owner;
+                e.func = Some(f);
+                return EffectId(i as u16);
+            }
+        }
+        debug_assert!(false, "effect arena exhausted (raise N_EFFECTS)");
+        EffectId((N_EFFECTS - 1) as u16)
+    }
+}
+
+/// Look up the effect that backs a Text node and run it with dependency tracking on.
+/// The closure is moved OUT of the lock before calling, so its inner `get()`/`set()`
+/// (which re-lock) never nest inside this `with_runtime`.
+pub(crate) fn run_effect_of(node: NodeId) {
+    let taken = with_runtime(|rt| {
+        let eid = effect_of_text(rt, node)?;
+        rt.current_effect = Some(node);
+        rt.effects[eid.0 as usize].func.take().map(|f| (eid, f))
+    });
+    if let Some((eid, mut f)) = taken {
+        f.call(); // runs OUTSIDE the lock; its get()s re-lock briefly
+        with_runtime(|rt| {
+            rt.current_effect = None;
+            rt.effects[eid.0 as usize].func = Some(f);
+        });
+    }
+}
+
+#[allow(dead_code)] // gains a non-test caller in Task 10 (input/driver).
+pub(crate) fn invoke_handler_of(node: NodeId) {
+    let taken = with_runtime(|rt| {
+        let eid = handler_of_button(rt, node)?;
+        rt.effects[eid.0 as usize].func.take().map(|f| (eid, f))
+    });
+    if let Some((eid, mut f)) = taken {
+        f.call();
+        with_runtime(|rt| rt.effects[eid.0 as usize].func = Some(f));
     }
 }
 

@@ -1,8 +1,10 @@
 //! A disposal scope. Signals created under a scope are freed when it is disposed.
 //! Layer #1 uses the root scope; `child` is the seam Navigation (Layer #2) needs.
 
-use crate::reactive::runtime::{with_runtime, OwnerId};
+use crate::reactive::bounded_fn::BoundedFn;
+use crate::reactive::runtime::{with_runtime, EffectId, OwnerId};
 use crate::reactive::signal::{ReactiveValue, Signal};
+use crate::reactive::CLOSURE_WORDS;
 
 #[derive(Copy, Clone)]
 pub struct Scope {
@@ -24,6 +26,11 @@ impl Scope {
     }
     pub fn dispose(self) {
         with_runtime(|rt| rt.free_owner(self.owner));
+    }
+    /// Store a handler/effect closure; returns its id for a node to reference.
+    pub fn handler(self, f: impl FnMut() + 'static) -> EffectId {
+        let bf = BoundedFn::<CLOSURE_WORDS, ()>::new(f);
+        with_runtime(|rt| rt.alloc_effect(self.owner, bf))
     }
 }
 
