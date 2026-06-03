@@ -23,16 +23,19 @@ const TEXT_PAD: i16 = 6;
 /// What a node needs drawn, snapshotted out of the runtime lock.
 enum Draw {
     Text { bounds: Rect, content: heapless::String<TEXT_CAP> },
-    Button { bounds: Rect, label: &'static str, pressed: bool },
+    Button { bounds: Rect, label: &'static str, pressed: bool, focused: bool },
     Container,
 }
 
 fn snapshot(node: NodeId) -> Draw {
     with_runtime(|rt| {
+        let focused = rt.focus == Some(node);
         let n = &rt.nodes[node.0 as usize];
         match &n.kind {
             Kind::Text { content, .. } => Draw::Text { bounds: n.bounds, content: content.clone() },
-            Kind::Button { label, pressed, .. } => Draw::Button { bounds: n.bounds, label, pressed: *pressed },
+            Kind::Button { label, pressed, .. } => {
+                Draw::Button { bounds: n.bounds, label, pressed: *pressed, focused }
+            }
             Kind::Column { .. } | Kind::Row { .. } => Draw::Container,
         }
     })
@@ -44,9 +47,9 @@ fn draw_node<C: Canvas, T: WidgetTheme<C>>(node: NodeId, canvas: &mut C, theme: 
             canvas.fill_rect(bounds, TEXT_BG);
             canvas.text(Point::new(bounds.x + TEXT_PAD, bounds.y + TEXT_PAD), &content, FontId(0), TEXT_FG);
         }
-        Draw::Button { bounds, label, pressed } => {
+        Draw::Button { bounds, label, pressed, focused } => {
             let mut hint = UpdateHint::default();
-            let mut ctx = DrawCtx::new(canvas, bounds, false, &mut hint);
+            let mut ctx = DrawCtx::new(canvas, bounds, focused, &mut hint);
             theme.draw_button(&mut ctx, label, pressed);
         }
         Draw::Container => {} // containers paint nothing; children are drawn by draw_subtree
@@ -97,7 +100,7 @@ mod tests {
     use super::*;
     use crate::canvas::{FONT0_H, FONT0_W};
     use crate::geometry::Size;
-    use crate::reactive::node::{button, col, text};
+    use crate::reactive::node::{button, col, text, text_static};
     use crate::reactive::scope::Scope;
     use crate::types::Constraints;
     use crate::{DrawOp, MockCanvas, Theme};
@@ -126,6 +129,38 @@ mod tests {
             DrawOp::StrokeRect(a, _, _) => rect_in(*a, r),
             DrawOp::Text(p, _) => r.contains(*p),
         }
+    }
+
+    struct FocusTheme;
+    impl Theme for FocusTheme {}
+    impl WidgetTheme<MockCanvas> for FocusTheme {
+        fn measure_button(&self, label: &str, _c: Constraints) -> Size {
+            Size::new(label.chars().count() as i16 * FONT0_W + 12, FONT0_H + 12)
+        }
+        fn draw_button(&self, ctx: &mut DrawCtx<MockCanvas>, _label: &str, _pressed: bool) {
+            // GRAY only when focused; text fills are WHITE, so GRAY uniquely marks a focused button.
+            let bg = if ctx.focused { Color::GRAY } else { Color::BLACK };
+            ctx.canvas.fill_rect(ctx.bounds, bg);
+        }
+    }
+
+    #[test]
+    fn focused_button_receives_focused_true_in_draw() {
+        let cx = Scope::root();
+        let b = button(cx, "x", || {});
+        let root = col(cx, (text_static(cx, "t"), b));
+        layout(root, Rect::new(0, 0, 200, 200));
+        with_runtime(|rt| rt.focus = Some(b));
+
+        let mut canvas = MockCanvas::new();
+        render_frame_full(root, &mut canvas, &FocusTheme);
+
+        let drew_focused = canvas
+            .ops
+            .iter()
+            .any(|op| matches!(op, DrawOp::FillRect(_, Color::GRAY)));
+        assert!(drew_focused, "the focused button must be drawn with focused=true");
+        cx.dispose();
     }
 
     #[test]

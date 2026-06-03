@@ -96,6 +96,7 @@ pub(crate) fn focus_next() {
         if n == 0 {
             return;
         }
+        let old = rt.focus;
         let cur = rt.focus.map(|f| f.0 as usize);
         for off in 1..=n {
             let i = match cur {
@@ -103,7 +104,10 @@ pub(crate) fn focus_next() {
                 None => off - 1, // scan from index 0 when nothing is focused
             };
             if matches!(rt.nodes[i].kind, Kind::Button { .. }) {
-                rt.focus = Some(NodeId(i as u16));
+                let new = NodeId(i as u16);
+                rt.focus = Some(new);
+                mark_dirty(rt, old);
+                mark_dirty(rt, Some(new));
                 return;
             }
         }
@@ -289,6 +293,25 @@ mod tests {
         assert_eq!(a_count.get(), 0, "earlier button is skipped");
         assert_eq!(b_count.get(), 1, "later (top-most) button wins");
         assert_eq!(with_runtime(|rt| rt.focus), Some(b));
+        cx.dispose();
+    }
+
+    #[test]
+    fn focus_next_dirties_old_and_new_focused_buttons() {
+        let cx = Scope::root();
+        let b0 = button(cx, "a", || {});
+        let b1 = button(cx, "b", || {});
+        // b1 is the node immediately after b0, so FocusNext from b0 lands on b1.
+        with_runtime(|rt| {
+            rt.focus = Some(b0);
+            rt.dirty.clear();
+        });
+        focus_next();
+        with_runtime(|rt| {
+            assert_eq!(rt.focus, Some(b1), "focus advanced to the next button");
+            assert!(rt.dirty.contains(&b0), "old focus repaints");
+            assert!(rt.dirty.contains(&b1), "new focus repaints");
+        });
         cx.dispose();
     }
 }
