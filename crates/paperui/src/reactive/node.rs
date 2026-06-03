@@ -46,11 +46,41 @@ pub(crate) fn effect_of_text(rt: &Runtime, node: NodeId) -> Option<EffectId> {
     }
 }
 
-#[allow(dead_code)] // gains a non-test caller in Task 10 (focus/activate).
 pub(crate) fn handler_of_button(rt: &Runtime, node: NodeId) -> Option<EffectId> {
     match &rt.nodes[node.0 as usize].kind {
         Kind::Button { on_press, .. } => Some(*on_press),
         _ => None,
+    }
+}
+
+/// Advance focus to the next `Button` node (wrapping). With no current focus, starts at the
+/// first node. Non-Button nodes are skipped.
+pub(crate) fn focus_next() {
+    with_runtime(|rt| {
+        let n = rt.nodes.len();
+        if n == 0 {
+            return;
+        }
+        let cur = rt.focus.map(|f| f.0 as usize);
+        for off in 1..=n {
+            let i = match cur {
+                Some(c) => (c + off) % n,
+                None => off - 1, // scan from index 0 when nothing is focused
+            };
+            if matches!(rt.nodes[i].kind, Kind::Button { .. }) {
+                rt.focus = Some(NodeId(i as u16));
+                return;
+            }
+        }
+    });
+}
+
+/// Run the focused node's handler (if any). Reads focus inside the lock, then invokes OUTSIDE
+/// it (invoke_handler_of uses the take-out/put-back pattern and must not be nested).
+pub(crate) fn invoke_handler_of_focus() {
+    let focused = with_runtime(|rt| rt.focus);
+    if let Some(node) = focused {
+        crate::reactive::runtime::invoke_handler_of(node);
     }
 }
 

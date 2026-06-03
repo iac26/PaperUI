@@ -40,6 +40,7 @@ pub(crate) struct Runtime {
     pub signals: [SignalSlot; N_SIGNALS],
     pub owners_used: [bool; N_OWNERS],
     pub current_effect: Option<NodeId>,
+    pub focus: Option<NodeId>,
     pub dirty: Vec<NodeId, N_NODES>,
     pub epoch: u32,
     pub nodes: Vec<Node, N_NODES>,
@@ -60,6 +61,7 @@ static RUNTIME: Mutex<RefCell<Runtime>> = Mutex::new(RefCell::new(Runtime {
     signals: [EMPTY_SIGNAL; N_SIGNALS],
     owners_used: [false; N_OWNERS],
     current_effect: None,
+    focus: None,
     dirty: Vec::new(),
     epoch: 0,
     nodes: Vec::new(),
@@ -185,7 +187,6 @@ pub(crate) fn run_effect_of(node: NodeId) {
     }
 }
 
-#[allow(dead_code)] // gains a non-test caller in Task 10 (input/driver).
 pub(crate) fn invoke_handler_of(node: NodeId) {
     let taken = with_runtime(|rt| {
         let eid = handler_of_button(rt, node)?;
