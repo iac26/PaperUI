@@ -62,7 +62,10 @@ pub(crate) fn with_runtime<R>(f: impl FnOnce(&mut Runtime) -> R) -> R {
 #[allow(dead_code)]
 impl Runtime {
     pub(crate) fn alloc_owner(&mut self) -> OwnerId {
-        for (i, used) in self.owners_used.iter_mut().enumerate() {
+        // OwnerId(0) is reserved as a sentinel "no real owner" (the EMPTY_SIGNAL placeholder
+        // owner and the default). Real scopes start at 1 so a scope's dispose never sweeps
+        // placeholder/leaked slots tagged with owner 0.
+        for (i, used) in self.owners_used.iter_mut().enumerate().skip(1) {
             if !*used {
                 *used = true;
                 return OwnerId(i as u16);

@@ -23,3 +23,6 @@ pub(crate) use runtime::with_runtime;
 
 mod signal;
 pub use signal::{ReactiveValue, Signal};
+
+mod scope;
+pub use scope::{use_state, Scope};
