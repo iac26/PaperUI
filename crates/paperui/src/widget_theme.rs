@@ -1,4 +1,4 @@
-use paperui_core::{Canvas, Constraints, DrawCtx, Size, Theme};
+use crate::{Canvas, Constraints, DrawCtx, Size, Theme};
 
 /// The render contract for THIS widget set: one measure/draw pair per widget kind.
 /// Themes (paperui-theme-*) implement it. Generic over the Canvas so the same

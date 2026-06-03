@@ -40,7 +40,7 @@ power-enable GPIO (drive it before `init`). GT911: I2C (SDA/SCL) + INT + RST. Fi
 in from your board's schematic during bring-up.
 
 ## How it fits the engine
-`EinkRenderer` is the concrete `paperui_core::Renderer` for e-ink: the same widget tree +
+`EinkRenderer` is the concrete `paperui::Renderer` for e-ink: the same widget tree +
 the same engine loop that drives the StickC TFT also drives the M5Paper — only the renderer
 (power lifecycle + waveform) and theme (`EinkTheme`) differ. Swapping `DefaultTheme`↔
 `EinkTheme` reskins with zero widget-logic change.

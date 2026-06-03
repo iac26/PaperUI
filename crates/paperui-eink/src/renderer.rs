@@ -7,7 +7,7 @@ use crate::it8951::It8951;
 use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::{InputPin, OutputPin};
 use embedded_hal::spi::SpiBus;
-use paperui_core::{Rect, Renderer, UpdateHint};
+use paperui::{Rect, Renderer, UpdateHint};
 
 fn mode_for(hint: UpdateHint) -> u16 {
     match hint {

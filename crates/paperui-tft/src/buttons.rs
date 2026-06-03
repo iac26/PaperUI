@@ -1,6 +1,6 @@
 //! Reads the StickC's BtnA/BtnB GPIOs (active-low) and turns them into gesture events.
 use esp_hal::gpio::Input;
-use paperui_core::{ButtonEvent, ButtonId, GestureState};
+use paperui::{ButtonEvent, ButtonId, GestureState};
 
 pub struct ButtonReader<'d> {
     btn_a: Input<'d>,

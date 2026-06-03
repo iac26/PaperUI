@@ -1,14 +1,13 @@
-#![no_std]
-//! Adapter: implements paperui-core's `Canvas` over any embedded-graphics
-//! `DrawTarget<Color = Rgb565>`. The engine and themes never depend on
-//! embedded-graphics; only this crate (and the device backends) do.
+//! Adapter: implements PaperUI's `Canvas` over any embedded-graphics
+//! `DrawTarget<Color = Rgb565>`. Behind the `eg` feature so the engine never
+//! depends on a graphics library unless this adapter is requested.
 
 use embedded_graphics::mono_font::{ascii::FONT_6X9, MonoTextStyle};
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyle, PrimitiveStyleBuilder, Rectangle};
 use embedded_graphics::text::{Baseline, Text};
-use paperui_core::{Canvas, Color, FontId, Point as PPoint, Rect, Size as PSize};
+use crate::{Canvas, Color, FontId, Point as PPoint, Rect, Size as PSize};
 
 /// Down-convert PaperUI RGB888 to embedded-graphics Rgb565.
 pub fn to_rgb565(c: Color) -> Rgb565 {
@@ -67,7 +66,7 @@ mod tests {
     use super::*;
     use embedded_graphics::mock_display::MockDisplay;
     use embedded_graphics::pixelcolor::Rgb565;
-    use paperui_core::{Canvas, Color, FontId, Point, Rect};
+    use crate::{Canvas, Color, FontId, Point, Rect};
 
     #[test]
     fn to_rgb565_downconverts_channels() {
@@ -90,6 +89,6 @@ mod tests {
         display.set_allow_overdraw(true);
         let mut c = EgCanvas::new(&mut display);
         let sz = c.text(Point::new(0, 0), "Hi", FontId(0), Color::WHITE);
-        assert_eq!(sz, paperui_core::Size::new(2 * 6, 8));
+        assert_eq!(sz, crate::Size::new(2 * 6, 8));
     }
 }

@@ -1,6 +1,7 @@
-use paperui_core::{Color, Constraints, DrawCtx, DrawOp, MockCanvas, Rect, Size, UpdateHint, Widget};
-use paperui_widgets::{Button, WidgetTheme};
-use paperui_theme_tft::DefaultTheme;
+use paperui::{
+    Button, Color, Constraints, DefaultTheme, DrawCtx, DrawOp, MockCanvas, Rect, Size, UpdateHint,
+    Widget, WidgetTheme,
+};
 
 #[test]
 fn default_theme_measures_button_from_label_plus_padding() {

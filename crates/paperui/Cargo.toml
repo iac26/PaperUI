@@ -1,0 +1,14 @@
+[package]
+name = "paperui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+heapless = "0.8"
+embedded-graphics = { version = "0.8", optional = true }
+
+[features]
+# `eg`   — the Canvas -> embedded-graphics DrawTarget adapter (pulls embedded-graphics).
+# `mock` — a recording mock Canvas + draw-op log, for host tests.
+eg = ["dep:embedded-graphics"]
+mock = []

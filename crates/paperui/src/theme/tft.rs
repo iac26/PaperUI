@@ -1,5 +1,5 @@
-use paperui_core::{Canvas, Color, Constraints, DrawCtx, FontId, Point, Size, Theme, UpdateHint, FONT0_H, FONT0_W};
-use paperui_widgets::WidgetTheme;
+use crate::{Canvas, Color, Constraints, DrawCtx, FontId, Point, Size, Theme, UpdateHint, FONT0_H, FONT0_W};
+use crate::WidgetTheme;
 
 const PAD_X: i16 = 8;
 const PAD_Y: i16 = 6;

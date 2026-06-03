@@ -1,11 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/paperui-core",
-    "crates/paperui-widgets",
-    "crates/paperui-theme-tft",
-    "crates/paperui-theme-eink",
-    "crates/paperui-eg",
+    "crates/paperui",
     "crates/paperui-tft",
     "crates/paperui-eink",
 ]

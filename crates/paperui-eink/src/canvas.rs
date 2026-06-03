@@ -1,7 +1,7 @@
 //! A bounded 4-bit grayscale framebuffer that implements paperui-core's `Canvas`.
 //! The EinkRenderer flushes its packed bytes to the IT8951. Static (no alloc).
 
-use paperui_core::{Canvas, Color, FontId, Point, Rect, Size, FONT0_H, FONT0_W};
+use paperui::{Canvas, Color, FontId, Point, Rect, Size, FONT0_H, FONT0_W};
 
 /// Modest windowed buffer (one byte/pixel, gray 0..=15) — a full 960x540 buffer would
 /// overflow ESP32 internal RAM, so full-screen rendering streams per-region / uses PSRAM.

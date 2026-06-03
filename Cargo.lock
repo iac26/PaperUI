@@ -797,18 +797,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "paperui-core"
-version = "0.1.0"
-dependencies = [
- "heapless 0.8.0",
-]
-
-[[package]]
-name = "paperui-eg"
+name = "paperui"
 version = "0.1.0"
 dependencies = [
  "embedded-graphics",
- "paperui-core",
+ "heapless 0.8.0",
 ]
 
 [[package]]
@@ -819,7 +812,7 @@ dependencies = [
  "esp-hal",
  "gt911",
  "heapless 0.8.0",
- "paperui-core",
+ "paperui",
 ]
 
 [[package]]
@@ -827,30 +820,7 @@ name = "paperui-tft"
 version = "0.1.0"
 dependencies = [
  "esp-hal",
- "paperui-core",
-]
-
-[[package]]
-name = "paperui-theme-eink"
-version = "0.1.0"
-dependencies = [
- "paperui-core",
- "paperui-widgets",
-]
-
-[[package]]
-name = "paperui-theme-tft"
-version = "0.1.0"
-dependencies = [
- "paperui-core",
- "paperui-widgets",
-]
-
-[[package]]
-name = "paperui-widgets"
-version = "0.1.0"
-dependencies = [
- "paperui-core",
+ "paperui",
 ]
 
 [[package]]

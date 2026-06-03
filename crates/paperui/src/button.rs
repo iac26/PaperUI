@@ -1,4 +1,4 @@
-use paperui_core::{Canvas, Constraints, DrawCtx, Size, Widget};
+use crate::{Canvas, Constraints, DrawCtx, Size, Widget};
 use crate::widget_theme::WidgetTheme;
 
 /// Pure-logic button. Holds its label, pressed state, and a function-pointer
@@ -27,7 +27,7 @@ impl<C: Canvas, T: WidgetTheme<C>> Widget<C, T> for Button {
 /// Minimal concrete Canvas/Theme used only to name the generic trait in unit tests.
 #[cfg(test)]
 pub(crate) mod tests_support {
-    use paperui_core::{Canvas, Color, FontId, Point, Rect, Size, Theme};
+    use crate::{Canvas, Color, FontId, Point, Rect, Size, Theme};
 
     pub struct NoCanvas;
     impl Canvas for NoCanvas {
@@ -40,8 +40,8 @@ pub(crate) mod tests_support {
     pub struct NoTheme;
     impl Theme for NoTheme {}
     impl super::WidgetTheme<NoCanvas> for NoTheme {
-        fn measure_button(&self, _l: &str, c: paperui_core::Constraints) -> Size { c.clamp(Size::new(0, 0)) }
-        fn draw_button(&self, _ctx: &mut paperui_core::DrawCtx<NoCanvas>, _l: &str, _p: bool) {}
+        fn measure_button(&self, _l: &str, c: crate::Constraints) -> Size { c.clamp(Size::new(0, 0)) }
+        fn draw_button(&self, _ctx: &mut crate::DrawCtx<NoCanvas>, _l: &str, _p: bool) {}
     }
 }
 
@@ -59,8 +59,8 @@ mod tests {
         FIRED.store(false, Ordering::SeqCst);
         let mut b = Button::new("OK").on_click(on_click);
         // Pin C/T to name the generic Widget trait (these methods ignore C/T).
-        assert!(paperui_core::Widget::<NoCanvas, NoTheme>::focusable(&b));
-        paperui_core::Widget::<NoCanvas, NoTheme>::on_activate(&mut b);
+        assert!(crate::Widget::<NoCanvas, NoTheme>::focusable(&b));
+        crate::Widget::<NoCanvas, NoTheme>::on_activate(&mut b);
         assert!(FIRED.load(Ordering::SeqCst));
     }
 }
