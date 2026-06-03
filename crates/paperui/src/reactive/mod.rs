@@ -15,3 +15,8 @@ pub const CLOSURE_WORDS: usize = 8;
 
 mod bounded_fn;
 pub use bounded_fn::BoundedFn;
+
+mod runtime;
+pub use runtime::{EffectId, NodeId, OwnerId, SignalId};
+#[allow(unused_imports)]
+pub(crate) use runtime::with_runtime;
