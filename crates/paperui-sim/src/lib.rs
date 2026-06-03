@@ -9,3 +9,5 @@
 
 mod config;
 pub use config::SimConfig;
+
+mod input_map;
