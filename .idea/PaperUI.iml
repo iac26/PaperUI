@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="EMPTY_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/app/paperui-stickc-remote/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/electrolux-ir/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/paperui-core/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/paperui-eg/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/paperui-eink/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/paperui-tft/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/paperui-theme-eink/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/paperui-theme-eink/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/paperui-theme-tft/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/paperui-theme-tft/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/paperui-widgets/src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/target" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>
