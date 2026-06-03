@@ -27,7 +27,6 @@ pub(crate) struct SignalSlot {
     pub in_use: bool,
 }
 
-#[allow(dead_code)] // `func` is write-only here; alloc_effect (Task 7) fully exercises it.
 pub(crate) struct EffectSlot {
     pub func: Option<BoundedFn<CLOSURE_WORDS, ()>>,
     pub owner: OwnerId,
@@ -108,6 +107,12 @@ impl Runtime {
         // Vec; removing a node would shift later indices and corrupt every other NodeId.
         // Layer #1 builds the tree once and runs forever, so append-only is correct here;
         // node reclamation across screens is a Layer #2 (navigation) concern.
+        //
+        // LAYER #2 PRECONDITION: do not dispose an owner whose effect is mid-call (its func
+        // is currently taken out of the slot by run_effect_of/invoke_handler_of). Clearing
+        // such a slot here, then having the put-back write the func back, would resurrect a
+        // freed slot. Unreachable in Layer #1 (single-threaded, no dispose-from-within-effect);
+        // before Layer #2 allows it, gate the put-back on the slot still being `in_use`.
     }
 }
 
@@ -161,13 +166,20 @@ impl Runtime {
 pub(crate) fn run_effect_of(node: NodeId) {
     let taken = with_runtime(|rt| {
         let eid = effect_of_text(rt, node)?;
-        rt.current_effect = Some(node);
-        rt.effects[eid.0 as usize].func.take().map(|f| (eid, f))
+        rt.effects[eid.0 as usize].func.take().map(|f| {
+            // Save the previous tracking cursor and install ours; we restore it (not blindly
+            // clear to None) on put-back so a nested effect (Layer #2 derived/memo effects)
+            // can't clobber an outer effect's subscription. We only touch current_effect once
+            // the func is actually taken, so a re-entrant skip (func already None) is a no-op.
+            let prev = rt.current_effect;
+            rt.current_effect = Some(node);
+            (eid, prev, f)
+        })
     });
-    if let Some((eid, mut f)) = taken {
+    if let Some((eid, prev, mut f)) = taken {
         f.call(); // runs OUTSIDE the lock; its get()s re-lock briefly
         with_runtime(|rt| {
-            rt.current_effect = None;
+            rt.current_effect = prev;
             rt.effects[eid.0 as usize].func = Some(f);
         });
     }
