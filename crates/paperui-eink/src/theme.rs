@@ -1,5 +1,8 @@
-use crate::{Canvas, Color, Constraints, DrawCtx, FontId, Point, Size, Theme, UpdateHint, FONT0_H, FONT0_W};
-use crate::WidgetTheme;
+//! The e-ink theme — this board addon's default look.
+use paperui::{
+    Canvas, Color, Constraints, DrawCtx, FontId, Point, Size, Theme, UpdateHint, WidgetTheme,
+    FONT0_H, FONT0_W,
+};
 
 const PAD_X: i16 = 10;
 const PAD_Y: i16 = 8;

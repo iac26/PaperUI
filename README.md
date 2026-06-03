@@ -12,32 +12,44 @@ drivers are opt-in (a feature, and separate board crates).
 
 | Crate | Responsibility | Target |
 |-------|----------------|--------|
-| `paperui` | The framework: `Canvas`/`Widget`/`Theme`/`Renderer`/`InputSource` traits, `State`, geometry, button gestures, the logic widgets (`Button`), and the default themes (`DefaultTheme`, `EinkTheme`). | host-testable |
-| `paperui-tft` | M5StickC Plus2 backend: GPIO button-gesture input (esp-hal). | ESP32 / Xtensa |
-| `paperui-eink` | M5Paper backend: self-authored IT8951 e-ink driver + sleep/wake `Renderer` + GT911 touch (esp-hal). | ESP32 / Xtensa |
+| `paperui` | The framework plumbing: the `Canvas`/`Widget`/`Theme`/`WidgetTheme`/`Renderer`/`InputSource` traits, `State`, geometry, button gestures, and the logic widgets (`Button`). Ships the `WidgetTheme` **contract**, not a concrete look. | host-testable |
+| `paperui-tft` | M5StickC Plus2 addon: the full-color `TftTheme` (host-testable) + GPIO button-gesture input (`ButtonReader`, esp-hal, behind `hal`). | host + ESP32 |
+| `paperui-eink` | M5Paper addon: the `EinkTheme` (host-testable) + a self-authored IT8951 e-ink driver + sleep/wake `Renderer` + GT911 touch (esp-hal, behind `hal`). | host + ESP32 |
 
 `paperui` features:
 - **`eg`** — the `Canvas` → `embedded-graphics` `DrawTarget` adapter (`EgCanvas`). Pulls
   `embedded-graphics`; off by default so the engine stays graphics-library-free.
 - **`mock`** — a recording mock `Canvas` for host tests.
 
-The two board crates are kept separate (not features) on purpose: they pull `esp-hal` and
+**Plumbing vs. rendering.** `paperui` is the declarative plumbing: the engine, the widget
+*logic*, and the trait contracts — including `WidgetTheme`, but **no concrete colors**. Each
+board **addon** crate provides the rendering for its panel: the driver *and* that board's
+theme (`paperui-tft::TftTheme`, `paperui-eink::EinkTheme`). A theme is pure logic over the
+abstract `Canvas`, so it is host-testable; the esp-hal driver sits behind each addon's
+default **`hal`** feature, so `--no-default-features` builds and tests the theme on host.
+
+The board crates are separate (not features of `paperui`) on purpose: they pull `esp-hal` and
 mutually-exclusive display drivers, so an app only ever compiles the board it names, and the
 `paperui` crate never drags in `esp-hal`.
 
-**Principles:** logic ⟂ rendering (widgets are logic; themes render); static memory only (no
-`alloc`); device backends own panel presentation + power lifecycle. The same widget tree
-reskins across color-TFT and e-ink by swapping the theme — no widget-logic change.
+**Principles:** logic ⟂ rendering (widgets are logic; themes + drivers render); static memory
+only (no `alloc`); board addons own the look + panel presentation + power lifecycle. The same
+widget tree reskins by swapping the theme — no widget-logic change. Anyone can ship their own
+look by implementing `WidgetTheme` over a `Canvas`.
 
 ## Building
 
 ```bash
 source ~/export-esp.sh   # esp toolchain (espup)
 
-# Host (engine + widgets + themes + the eg adapter):
+# Host (engine + widgets + the eg adapter):
 cargo test -p paperui --features mock,eg --target x86_64-unknown-linux-gnu
 
-# Device backends (ESP32 / Xtensa):
+# Host (each board addon's theme — no esp-hal):
+cargo test -p paperui-tft  --no-default-features --features mock --target x86_64-unknown-linux-gnu
+cargo test -p paperui-eink --no-default-features --features mock --target x86_64-unknown-linux-gnu
+
+# Device backends, full addon incl. drivers (ESP32 / Xtensa):
 cargo +esp build -p paperui-tft -p paperui-eink \
   -Zbuild-std=core --target xtensa-esp32-none-elf
 ```

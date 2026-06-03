@@ -135,7 +135,8 @@ where
     pub fn load_image_area(&mut self, addr: u32, x: u16, y: u16, w: u16, h: u16, packed: &[u16]) {
         self.set_target_memory(addr);
         self.write_command(CMD_LD_IMG_AREA);
-        self.write_data(&[0x0000_u16 | (0x02 << 4), x, y, w, h]);
+        // Image-load arg word: endianness=0, bpp=0b10 (4bpp) in bits[5:4], rotate=0.
+        self.write_data(&[0x02_u16 << 4, x, y, w, h]);
         self.write_data(packed);
         self.write_command(CMD_LD_IMG_END);
     }

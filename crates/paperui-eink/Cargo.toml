@@ -5,7 +5,16 @@ edition = "2021"
 
 [dependencies]
 paperui = { path = "../paperui" }
-esp-hal = { version = "1.1", features = ["esp32", "unstable"] }
 embedded-hal = "1.0"
-gt911 = "0.3"
 heapless = "0.8"
+esp-hal = { version = "1.1", features = ["esp32", "unstable"], optional = true }
+gt911 = { version = "0.3", optional = true }
+
+[features]
+# `hal`  — the esp-hal device backend (GT911 touch). On by default. The theme is
+#          pure paperui and the IT8951 driver/renderer/canvas are generic over
+#          embedded-hal traits, so `--no-default-features` builds/tests on host.
+# `mock` — forward paperui's recording mock Canvas, for the host theme tests.
+default = ["hal"]
+hal = ["dep:esp-hal", "dep:gt911"]
+mock = ["paperui/mock"]

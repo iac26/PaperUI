@@ -1,5 +1,8 @@
-use crate::{Canvas, Color, Constraints, DrawCtx, FontId, Point, Size, Theme, UpdateHint, FONT0_H, FONT0_W};
-use crate::WidgetTheme;
+//! The TFT (full-color) theme — this board addon's default look.
+use paperui::{
+    Canvas, Color, Constraints, DrawCtx, FontId, Point, Size, Theme, UpdateHint, WidgetTheme,
+    FONT0_H, FONT0_W,
+};
 
 const PAD_X: i16 = 8;
 const PAD_Y: i16 = 6;
@@ -9,11 +12,11 @@ const BORDER: Color = Color::rgb(0x40, 0x40, 0x40);
 const BORDER_FOCUS: Color = Color::rgb(0x1E, 0x90, 0xFF);
 const LABEL: Color = Color::BLACK;
 
-/// The default color/TFT look. Stateless singleton — holds no data.
-pub struct DefaultTheme;
-impl Theme for DefaultTheme {}
+/// The full-color TFT look. Stateless singleton — holds no data.
+pub struct TftTheme;
+impl Theme for TftTheme {}
 
-impl<C: Canvas> WidgetTheme<C> for DefaultTheme {
+impl<C: Canvas> WidgetTheme<C> for TftTheme {
     fn measure_button(&self, label: &str, c: Constraints) -> Size {
         let w = label.chars().count() as i16 * FONT0_W + 2 * PAD_X;
         let h = FONT0_H + 2 * PAD_Y;

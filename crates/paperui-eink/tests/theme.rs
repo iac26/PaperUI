@@ -1,7 +1,8 @@
 use paperui::{
-    Button, Color, Constraints, DrawCtx, DrawOp, EinkTheme, MockCanvas, Rect, Size, UpdateHint,
-    Widget, WidgetTheme,
+    Button, Color, Constraints, DrawCtx, DrawOp, MockCanvas, Rect, Size, UpdateHint, Widget,
+    WidgetTheme,
 };
+use paperui_eink::EinkTheme;
 
 #[test]
 fn eink_theme_measures_button_with_eink_padding() {

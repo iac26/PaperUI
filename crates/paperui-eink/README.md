@@ -1,13 +1,24 @@
 # paperui-eink
 
-M5Paper (ESP32 + IT8951 e-ink + GT911 touch) backend for PaperUI. A self-authored,
-`no_std`, alloc-free IT8951 SPI driver with the **sleep/wake power lifecycle** wired
-through `EinkRenderer` (the engine wakes the panel in `before_draw` and sleeps it in
-`after_draw`), a 4bpp `Gray4Canvas`, an `UpdateHint`→waveform mapping, and GT911 touch.
+M5Paper (ESP32 + IT8951 e-ink + GT911 touch) board addon for PaperUI. It provides this
+board's look — **`EinkTheme`**, pure logic over `paperui::Canvas` and therefore
+host-testable — plus a self-authored, `no_std`, alloc-free IT8951 SPI driver with the
+**sleep/wake power lifecycle** wired through `EinkRenderer` (the engine wakes the panel in
+`before_draw` and sleeps it in `after_draw`), a 4bpp `Gray4Canvas`, an `UpdateHint`→waveform
+mapping, and GT911 touch.
+
+The IT8951 driver/renderer/canvas are generic over `embedded-hal` traits; only the GT911
+touch input needs `esp-hal`, so it sits behind the default **`hal`** feature. Drop default
+features to build and test the theme (and the generic driver) on host.
 
 ## Build
 ```bash
 source ~/export-esp.sh
+
+# Host: the EinkTheme (no esp-hal)
+cargo test -p paperui-eink --no-default-features --features mock --target x86_64-unknown-linux-gnu
+
+# Device: full addon incl. drivers + touch
 cargo +esp build -p paperui-eink -Zbuild-std=core --target xtensa-esp32-none-elf
 ```
 
@@ -42,5 +53,5 @@ in from your board's schematic during bring-up.
 ## How it fits the engine
 `EinkRenderer` is the concrete `paperui::Renderer` for e-ink: the same widget tree +
 the same engine loop that drives the StickC TFT also drives the M5Paper — only the renderer
-(power lifecycle + waveform) and theme (`EinkTheme`) differ. Swapping `DefaultTheme`↔
-`EinkTheme` reskins with zero widget-logic change.
+(power lifecycle + waveform) and theme differ. Swapping `paperui_tft::TftTheme` ↔
+`paperui_eink::EinkTheme` reskins with zero widget-logic change.

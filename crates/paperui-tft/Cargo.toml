@@ -5,4 +5,12 @@ edition = "2021"
 
 [dependencies]
 paperui = { path = "../paperui" }
-esp-hal = { version = "1.1", features = ["esp32", "unstable"] }
+esp-hal = { version = "1.1", features = ["esp32", "unstable"], optional = true }
+
+[features]
+# `hal`  — the esp-hal device backend (`ButtonReader`). On by default. The theme is
+#          always available, so `--no-default-features` lets the crate build/test on host.
+# `mock` — forward paperui's recording mock Canvas, for the host theme tests.
+default = ["hal"]
+hal = ["dep:esp-hal"]
+mock = ["paperui/mock"]

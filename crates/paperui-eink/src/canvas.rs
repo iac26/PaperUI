@@ -35,9 +35,9 @@ impl Default for Gray4Canvas {
 }
 
 fn gray4(c: Color) -> u8 {
-    let r = ((c.0 >> 16) & 0xFF) as u32;
-    let g = ((c.0 >> 8) & 0xFF) as u32;
-    let b = (c.0 & 0xFF) as u32;
+    let r = (c.0 >> 16) & 0xFF;
+    let g = (c.0 >> 8) & 0xFF;
+    let b = c.0 & 0xFF;
     let luma = (r * 54 + g * 183 + b * 19) >> 8;
     (luma >> 4) as u8
 }
