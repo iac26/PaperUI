@@ -3,7 +3,7 @@
 use crate::geometry::{Point, Rect};
 use crate::reactive::runtime::{with_runtime, EffectId, NodeId, OwnerId, Runtime};
 use crate::reactive::scope::Scope;
-use crate::reactive::{MAX_CHILDREN, TEXT_CAP, VISIBLE};
+use crate::reactive::{ANIM_STEPS, MAX_CHILDREN, TEXT_CAP, VISIBLE};
 use heapless::Vec;
 
 /// Mark a node dirty (idempotent). Used when focus moves so the affected buttons repaint.
@@ -142,8 +142,8 @@ fn find_carousel(rt: &Runtime) -> Option<NodeId> {
     None
 }
 
-/// Move carousel selection by `delta`, scrolling the window and moving focus. SNAP (no animation
-/// yet — Task 6 adds the slide). Dirties the visible slots so they repaint.
+/// Move carousel selection by `delta`, scrolling the window and moving focus. Arms the slide
+/// animation when the window actually scrolls (offset changed). Dirties the visible slots.
 fn carousel_nav_inner(rt: &mut Runtime, cnode: NodeId, delta: i32) {
     let (children, sel, off) = match &rt.nodes[cnode.0 as usize].kind {
         Kind::Carousel { children, selected, offset, .. } => (children.clone(), *selected, *offset),
@@ -153,9 +153,14 @@ fn carousel_nav_inner(rt: &mut Runtime, cnode: NodeId, delta: i32) {
     if n == 0 { return; }
     let new_sel = (sel as i32 + delta).clamp(0, n as i32 - 1) as usize;
     let new_off = window_offset(n, new_sel, off);
-    if let Kind::Carousel { selected, offset, .. } = &mut rt.nodes[cnode.0 as usize].kind {
+    let scrolled = new_off != off;
+    if let Kind::Carousel { selected, offset, anim_frame, anim_dir, .. } = &mut rt.nodes[cnode.0 as usize].kind {
         *selected = new_sel;
         *offset = new_off;
+        if scrolled {
+            *anim_frame = ANIM_STEPS;
+            *anim_dir = if delta >= 0 { 1 } else { -1 };
+        }
     }
     rt.focus = Some(children[new_sel]);
     let end = (new_off + VISIBLE).min(n);
@@ -164,6 +169,32 @@ fn carousel_nav_inner(rt: &mut Runtime, cnode: NodeId, delta: i32) {
         if !rt.dirty.contains(&nid) {
             let _ = rt.dirty.push(nid);
         }
+    }
+}
+
+/// True if any carousel has an animation in progress (`anim_dir != 0`).
+pub(crate) fn any_carousel_animating(rt: &Runtime) -> bool {
+    rt.nodes.iter().any(|nd| matches!(&nd.kind, Kind::Carousel { anim_dir, .. } if *anim_dir != 0))
+}
+
+/// Advance every animating carousel by one frame. At frame 0 the resting frame has been drawn,
+/// so clear the animation and drop pending dirties (the anim path already painted them).
+pub(crate) fn step_carousel_anim(rt: &mut Runtime) {
+    let mut finished = false;
+    for nd in rt.nodes.iter_mut() {
+        if let Kind::Carousel { anim_frame, anim_dir, .. } = &mut nd.kind {
+            if *anim_dir != 0 {
+                if *anim_frame == 0 {
+                    *anim_dir = 0;
+                    finished = true;
+                } else {
+                    *anim_frame -= 1;
+                }
+            }
+        }
+    }
+    if finished {
+        rt.dirty.clear();
     }
 }
 
@@ -454,6 +485,56 @@ mod tests {
         let car = carousel(cx, &[a, button(cx, "b", || {})]);
         carousel_select_first(car);
         with_runtime(|rt| assert_eq!(rt.focus, Some(a)));
+        cx.dispose();
+    }
+
+    #[test]
+    fn scroll_arms_animation_but_in_window_move_does_not() {
+        let cx = Scope::root();
+        let items = [
+            button(cx, "0", || {}), button(cx, "1", || {}), button(cx, "2", || {}),
+            button(cx, "3", || {}), button(cx, "4", || {}), button(cx, "5", || {}),
+        ];
+        let car = carousel(cx, &items);
+        carousel_select_first(car);
+        // 0->1: in-window, no animation.
+        nav(1);
+        with_runtime(|rt| if let Kind::Carousel { anim_dir, .. } = &rt.nodes[car.0 as usize].kind {
+            assert_eq!(*anim_dir, 0, "in-window move does not animate");
+        });
+        // 1->2 (in window), 2->3 (scroll -> animate).
+        nav(1);
+        nav(1);
+        with_runtime(|rt| if let Kind::Carousel { anim_dir, anim_frame, .. } = &rt.nodes[car.0 as usize].kind {
+            assert_eq!(*anim_dir, 1, "scroll down arms a forward animation");
+            assert_eq!(*anim_frame, crate::reactive::ANIM_STEPS);
+        });
+        // disarm so this carousel doesn't pollute other tests' animation scans.
+        for _ in 0..=(crate::reactive::ANIM_STEPS as usize) {
+            with_runtime(|rt| step_carousel_anim(rt));
+        }
+        cx.dispose();
+    }
+
+    #[test]
+    fn step_counts_down_then_clears() {
+        let cx = Scope::root();
+        let items = [
+            button(cx, "0", || {}), button(cx, "1", || {}), button(cx, "2", || {}),
+            button(cx, "3", || {}),
+        ];
+        let car = carousel(cx, &items);
+        carousel_select_first(car);
+        nav(1); nav(1); nav(1); // 0->1->2->3 ; 2->3 scrolls (offset 0->1) -> arms
+        let armed = with_runtime(|rt| matches!(&rt.nodes[car.0 as usize].kind,
+            Kind::Carousel { anim_dir, .. } if *anim_dir != 0));
+        assert!(armed, "scroll armed this carousel");
+        for _ in 0..=(crate::reactive::ANIM_STEPS as usize) {
+            with_runtime(|rt| step_carousel_anim(rt));
+        }
+        let still = with_runtime(|rt| matches!(&rt.nodes[car.0 as usize].kind,
+            Kind::Carousel { anim_dir, .. } if *anim_dir != 0));
+        assert!(!still, "animation clears after ANIM_STEPS+1 steps");
         cx.dispose();
     }
 }

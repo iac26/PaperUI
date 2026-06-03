@@ -39,7 +39,7 @@ mod layout;
 pub use layout::layout;
 
 mod render;
-pub use render::{render_frame, render_frame_full};
+pub use render::{render_anim_frame, render_frame, render_frame_full};
 
 mod driver;
 pub use driver::{dispatch, has_dirty, run, EventSource, UiEvent};

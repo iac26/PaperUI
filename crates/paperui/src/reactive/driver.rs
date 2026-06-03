@@ -4,8 +4,8 @@
 
 use crate::canvas::Canvas;
 use crate::geometry::Point;
-use crate::reactive::node::{invoke_handler_at, invoke_handler_of_focus, nav};
-use crate::reactive::render::{render_frame, render_frame_full};
+use crate::reactive::node::{any_carousel_animating, invoke_handler_at, invoke_handler_of_focus, nav, step_carousel_anim};
+use crate::reactive::render::{render_anim_frame, render_frame, render_frame_full};
 use crate::reactive::runtime::{with_runtime, NodeId};
 use crate::widget_theme::WidgetTheme;
 
@@ -57,8 +57,15 @@ where
         while let Some(ev) = src.poll(now_ms) {
             dispatch(ev);
         }
-        if has_dirty() {
-            render_frame(root, canvas, theme);
+        let animating = with_runtime(|rt| any_carousel_animating(rt));
+        if animating {
+            render_anim_frame(root, canvas, theme);
+            with_runtime(step_carousel_anim);
+        } else {
+            let dirty_pending = with_runtime(|rt| !rt.dirty.is_empty());
+            if dirty_pending {
+                render_frame(root, canvas, theme);
+            }
         }
         now_ms = now_ms.wrapping_add(5);
     }

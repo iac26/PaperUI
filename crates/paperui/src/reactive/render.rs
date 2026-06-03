@@ -6,10 +6,10 @@
 use crate::canvas::Canvas;
 use crate::draw::DrawCtx;
 use crate::geometry::Rect;
-use crate::reactive::layout::layout;
+use crate::reactive::layout::{layout, CAROUSEL_ROW_H, CAROUSEL_ROW_PITCH};
 use crate::reactive::node::{window_offset, Kind};
 use crate::reactive::runtime::{run_effect_of, with_runtime, NodeId};
-use crate::reactive::{MAX_CHILDREN, TEXT_CAP, VISIBLE};
+use crate::reactive::{ANIM_STEPS, MAX_CHILDREN, TEXT_CAP, VISIBLE};
 use crate::types::UpdateHint;
 use crate::widget_theme::WidgetTheme;
 
@@ -100,12 +100,74 @@ pub fn render_frame_full<C: Canvas, T: WidgetTheme<C>>(root: NodeId, canvas: &mu
     with_runtime(|rt| rt.dirty.clear());
 }
 
+/// Render one frame of a carousel slide: clear the carousel region, draw the visible window plus
+/// the one incoming row shifted by the current `slide`, then repaint non-carousel root children
+/// (e.g. the status line) on top as a crude clip mask. Call once per loop while animating.
+pub fn render_anim_frame<C: Canvas, T: WidgetTheme<C>>(root: NodeId, canvas: &mut C, theme: &T) {
+    let info = with_runtime(|rt| {
+        let cnode = rt
+            .nodes
+            .iter()
+            .position(|nd| matches!(&nd.kind, Kind::Carousel { anim_dir, .. } if *anim_dir != 0))
+            .map(|i| NodeId(i as u16))?;
+        match &rt.nodes[cnode.0 as usize].kind {
+            Kind::Carousel { children, selected, offset, anim_frame, anim_dir, .. } => Some((
+                cnode,
+                rt.nodes[cnode.0 as usize].bounds,
+                children.clone(),
+                *selected,
+                *offset,
+                *anim_frame,
+                *anim_dir,
+            )),
+            _ => None,
+        }
+    });
+    let Some((cnode, cb, children, sel, off, frame, dir)) = info else { return; };
+    let n = children.len();
+    let slide = dir as i16 * CAROUSEL_ROW_PITCH * frame as i16 / ANIM_STEPS as i16;
+
+    canvas.fill_rect(cb, theme.background());
+
+    let lo = (off as i32 + if dir > 0 { -1 } else { 0 }).max(0) as usize;
+    let hi = ((off + VISIBLE) as i32 + if dir > 0 { 0 } else { 1 }).min(n as i32) as usize;
+    for k in lo..hi {
+        let yy = cb.y + (k as i32 - off as i32) as i16 * CAROUSEL_ROW_PITCH + slide;
+        let label = with_runtime(|rt| match &rt.nodes[children[k].0 as usize].kind {
+            Kind::Button { label, .. } => Some(*label),
+            _ => None,
+        });
+        if let Some(label) = label {
+            let mut hint = UpdateHint::default();
+            let mut ctx = DrawCtx::new(canvas, Rect::new(cb.x, yy, cb.w, CAROUSEL_ROW_H), k == sel, &mut hint);
+            theme.draw_button(&mut ctx, label, false);
+        }
+    }
+
+    // Overpaint mask: redraw root's non-carousel children (the status overlay) on top.
+    let overlays = with_runtime(|rt| match &rt.nodes[root.0 as usize].kind {
+        Kind::Column { children, .. } | Kind::Row { children, .. } => {
+            let mut v: heapless::Vec<NodeId, MAX_CHILDREN> = heapless::Vec::new();
+            for &c in children.iter() {
+                if c != cnode { let _ = v.push(c); }
+            }
+            Some(v)
+        }
+        _ => None,
+    });
+    if let Some(overlays) = overlays {
+        for c in overlays.iter() {
+            draw_subtree(*c, canvas, theme);
+        }
+    }
+}
+
 #[cfg(all(test, feature = "mock"))]
 mod tests {
     use super::*;
     use crate::canvas::{FONT0_H, FONT0_W};
     use crate::geometry::{Point, Size};
-    use crate::reactive::node::{button, carousel, carousel_select_first, col, text, text_static};
+    use crate::reactive::node::{button, carousel, carousel_select_first, col, nav, text, text_static};
     use crate::reactive::scope::Scope;
     use crate::types::{Color, Constraints, FontId};
     use crate::{DrawOp, MockCanvas, Theme};
@@ -209,6 +271,36 @@ mod tests {
         render_frame_full(car, &mut canvas, &TestTheme);
         let fills = canvas.ops.iter().filter(|op| matches!(op, DrawOp::FillRect(_, _))).count();
         assert_eq!(fills, 3, "only the 3 visible carousel buttons paint");
+        cx.dispose();
+    }
+
+    #[test]
+    fn anim_frame_shifts_rows_and_overpaints_status_last() {
+        let cx = Scope::root();
+        let items = [
+            button(cx, "0", || {}), button(cx, "1", || {}), button(cx, "2", || {}),
+            button(cx, "3", || {}), button(cx, "4", || {}), button(cx, "5", || {}),
+        ];
+        let car = carousel(cx, &items);
+        carousel_select_first(car);
+        let status = text_static(cx, "STATUS");
+        let root = col(cx, (status, car));
+        layout(root, Rect::new(0, 0, 240, 135));
+        // scroll to arm the animation (2->3 scrolls; dir = +1, offset = 1)
+        nav(1); nav(1); nav(1);
+        let mut canvas = MockCanvas::new();
+        render_anim_frame(root, &mut canvas, &TestTheme);
+        // carousel region cleared first
+        assert!(matches!(canvas.ops[0], DrawOp::FillRect(_, _)), "carousel region cleared first");
+        // during a slide, the visible window (3) PLUS one incoming row are drawn = 4 buttons
+        let strokes = canvas.ops.iter().filter(|op| matches!(op, DrawOp::StrokeRect(_, _, _))).count();
+        assert_eq!(strokes, 4, "VISIBLE rows + 1 incoming row drawn during the slide");
+        // status overlay is drawn LAST (on top, masking any intrusion)
+        assert!(matches!(canvas.ops.last(), Some(DrawOp::Text(_, _))), "status overlay drawn last");
+        // disarm so this carousel doesn't pollute other tests.
+        for _ in 0..=(crate::reactive::ANIM_STEPS as usize) {
+            with_runtime(|rt| crate::reactive::node::step_carousel_anim(rt));
+        }
         cx.dispose();
     }
 }
