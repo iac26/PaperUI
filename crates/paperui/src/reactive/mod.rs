@@ -4,7 +4,10 @@
 
 // --- compile-time capacities (override via patching these consts) ---
 pub const N_SIGNALS: usize = 32;
-pub const N_NODES: usize = 64;
+// Nodes are append-only within a runtime (Layer #1 never reclaims node slots), and the host test
+// suite shares ONE global runtime, so node usage accumulates across all tests in a run. An app
+// needs only a handful (~9 for the Electrolux remote); this headroom is sized for the test suite.
+pub const N_NODES: usize = 256;
 pub const N_EFFECTS: usize = 32;
 pub const N_OWNERS: usize = 16;
 pub const FANOUT: usize = 4;

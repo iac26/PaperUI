@@ -89,29 +89,89 @@ pub(crate) fn handler_of_button(rt: &Runtime, node: NodeId) -> Option<EffectId> 
     }
 }
 
-/// Advance focus to the next `Button` node (wrapping). With no current focus, starts at the
-/// first node. Non-Button nodes are skipped.
-pub(crate) fn focus_next() {
-    with_runtime(|rt| {
-        let n = rt.nodes.len();
-        if n == 0 {
+/// Forward focus to the next Button node (wrapping), operating on an already-locked runtime.
+fn focus_next_inner(rt: &mut Runtime) {
+    let n = rt.nodes.len();
+    if n == 0 { return; }
+    let old = rt.focus;
+    let cur = rt.focus.map(|f| f.0 as usize);
+    for off in 1..=n {
+        let i = match cur { Some(c) => (c + off) % n, None => off - 1 };
+        if matches!(rt.nodes[i].kind, Kind::Button { .. }) {
+            let new = NodeId(i as u16);
+            rt.focus = Some(new);
+            // Repaint both the button losing focus and the one gaining it (surgical highlight).
+            mark_dirty(rt, old);
+            mark_dirty(rt, Some(new));
             return;
         }
-        let old = rt.focus;
-        let cur = rt.focus.map(|f| f.0 as usize);
-        for off in 1..=n {
-            let i = match cur {
-                Some(c) => (c + off) % n,
-                None => off - 1, // scan from index 0 when nothing is focused
-            };
-            if matches!(rt.nodes[i].kind, Kind::Button { .. }) {
-                let new = NodeId(i as u16);
-                rt.focus = Some(new);
-                mark_dirty(rt, old);
-                mark_dirty(rt, Some(new));
-                return;
+    }
+}
+
+/// Backward focus to the previous Button node (wrapping).
+fn focus_prev_inner(rt: &mut Runtime) {
+    let n = rt.nodes.len();
+    if n == 0 { return; }
+    let old = rt.focus;
+    let cur = rt.focus.map(|f| f.0 as usize);
+    for off in 1..=n {
+        let i = match cur { Some(c) => (c + n - off) % n, None => n - off };
+        if matches!(rt.nodes[i].kind, Kind::Button { .. }) {
+            let new = NodeId(i as u16);
+            rt.focus = Some(new);
+            // Repaint both the button losing focus and the one gaining it (surgical highlight).
+            mark_dirty(rt, old);
+            mark_dirty(rt, Some(new));
+            return;
+        }
+    }
+}
+
+/// The Carousel node that OWNS the current focus, else `None`. Returning `None` when no carousel
+/// owns the focus lets `nav` fall back to plain focus cycling — and keeps the shared global test
+/// arena honest (leftover carousels never hijack a non-carousel focus).
+fn find_carousel(rt: &Runtime) -> Option<NodeId> {
+    let focus = rt.focus?;
+    for (i, node) in rt.nodes.iter().enumerate() {
+        if let Kind::Carousel { children, .. } = &node.kind {
+            if children.contains(&focus) {
+                return Some(NodeId(i as u16));
             }
         }
+    }
+    None
+}
+
+/// Move carousel selection by `delta`, scrolling the window and moving focus. SNAP (no animation
+/// yet — Task 6 adds the slide). Dirties the visible slots so they repaint.
+fn carousel_nav_inner(rt: &mut Runtime, cnode: NodeId, delta: i32) {
+    let (children, sel, off) = match &rt.nodes[cnode.0 as usize].kind {
+        Kind::Carousel { children, selected, offset, .. } => (children.clone(), *selected, *offset),
+        _ => return,
+    };
+    let n = children.len();
+    if n == 0 { return; }
+    let new_sel = (sel as i32 + delta).clamp(0, n as i32 - 1) as usize;
+    let new_off = window_offset(n, new_sel, off);
+    if let Kind::Carousel { selected, offset, .. } = &mut rt.nodes[cnode.0 as usize].kind {
+        *selected = new_sel;
+        *offset = new_off;
+    }
+    rt.focus = Some(children[new_sel]);
+    let end = (new_off + VISIBLE).min(n);
+    for i in new_off..end {
+        let nid = children[i];
+        if !rt.dirty.contains(&nid) {
+            let _ = rt.dirty.push(nid);
+        }
+    }
+}
+
+/// Public navigation entry: one critical section. Carousel-aware, else plain button cycling.
+pub(crate) fn nav(delta: i32) {
+    with_runtime(|rt| match find_carousel(rt) {
+        Some(cnode) => carousel_nav_inner(rt, cnode, delta),
+        None => if delta >= 0 { focus_next_inner(rt) } else { focus_prev_inner(rt) },
     });
 }
 
@@ -343,12 +403,12 @@ mod tests {
         let cx = Scope::root();
         let b0 = button(cx, "a", || {});
         let b1 = button(cx, "b", || {});
-        // b1 is the node immediately after b0, so FocusNext from b0 lands on b1.
+        // b1 is the node immediately after b0, so nav(1) from b0 lands on b1.
         with_runtime(|rt| {
             rt.focus = Some(b0);
             rt.dirty.clear();
         });
-        focus_next();
+        nav(1);
         with_runtime(|rt| {
             assert_eq!(rt.focus, Some(b1), "focus advanced to the next button");
             assert!(rt.dirty.contains(&b0), "old focus repaints");

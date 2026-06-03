@@ -4,7 +4,7 @@
 
 use crate::canvas::Canvas;
 use crate::geometry::Point;
-use crate::reactive::node::{focus_next, invoke_handler_at, invoke_handler_of_focus};
+use crate::reactive::node::{invoke_handler_at, invoke_handler_of_focus, nav};
 use crate::reactive::render::{render_frame, render_frame_full};
 use crate::reactive::runtime::{with_runtime, NodeId};
 use crate::widget_theme::WidgetTheme;
@@ -12,6 +12,7 @@ use crate::widget_theme::WidgetTheme;
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum UiEvent {
     FocusNext,
+    FocusPrev,
     Activate,
     Pointer(Point),
 }
@@ -26,7 +27,8 @@ pub trait EventSource {
 /// `paperui-sim` backend) can dispatch events it pumped from a window.
 pub fn dispatch(ev: UiEvent) {
     match ev {
-        UiEvent::FocusNext => focus_next(),
+        UiEvent::FocusNext => nav(1),
+        UiEvent::FocusPrev => nav(-1),
         UiEvent::Activate => invoke_handler_of_focus(),
         UiEvent::Pointer(p) => invoke_handler_at(p),
     }
@@ -72,7 +74,7 @@ pub(crate) fn pump_until_empty(src: &mut impl EventSource) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reactive::node::{button, col, text, text_static};
+    use crate::reactive::node::{button, carousel, carousel_select_first, col, text, text_static};
     use crate::reactive::scope::Scope;
     use crate::geometry::{Point, Rect};
 
@@ -127,6 +129,54 @@ mod tests {
         assert!(!has_dirty(), "no work pending right after a clear");
         count.set(1);
         assert!(has_dirty(), "a signal change dirties its subscriber");
+        cx.dispose();
+    }
+
+    fn six_carousel() -> (Scope, NodeId, [NodeId; 6]) {
+        let cx = Scope::root();
+        let items = [
+            button(cx, "0", || {}), button(cx, "1", || {}), button(cx, "2", || {}),
+            button(cx, "3", || {}), button(cx, "4", || {}), button(cx, "5", || {}),
+        ];
+        let car = carousel(cx, &items);
+        carousel_select_first(car);
+        (cx, car, items)
+    }
+
+    fn carousel_state(car: NodeId) -> (usize, usize) {
+        with_runtime(|rt| match &rt.nodes[car.0 as usize].kind {
+            crate::reactive::Kind::Carousel { selected, offset, .. } => (*selected, *offset),
+            _ => unreachable!(),
+        })
+    }
+
+    #[test]
+    fn down_moves_selection_then_scrolls_then_clamps() {
+        let (cx, car, items) = six_carousel();
+        let mut s = Scripted(heapless::Deque::new());
+        for _ in 0..6 { let _ = s.0.push_back(UiEvent::FocusNext); }
+        pump_until_empty(&mut s);
+        assert_eq!(carousel_state(car), (5, 3), "selected clamps at 5, offset at 3");
+        assert_eq!(with_runtime(|rt| rt.focus), Some(items[5]));
+        let _ = s.0.push_back(UiEvent::FocusNext);
+        pump_until_empty(&mut s);
+        assert_eq!(carousel_state(car), (5, 3));
+        cx.dispose();
+    }
+
+    #[test]
+    fn up_navigates_backward_and_clamps_at_zero() {
+        let (cx, car, items) = six_carousel();
+        let mut s = Scripted(heapless::Deque::new());
+        for _ in 0..3 { let _ = s.0.push_back(UiEvent::FocusNext); }
+        pump_until_empty(&mut s);
+        let _ = s.0.push_back(UiEvent::FocusPrev);
+        let _ = s.0.push_back(UiEvent::FocusPrev);
+        let _ = s.0.push_back(UiEvent::FocusPrev);
+        let _ = s.0.push_back(UiEvent::FocusPrev);
+        pump_until_empty(&mut s);
+        assert_eq!(carousel_state(car), (0, 0));
+        assert_eq!(with_runtime(|rt| rt.focus), Some(items[0]));
         cx.dispose();
     }
 }
