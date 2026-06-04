@@ -3,8 +3,14 @@
 use crate::geometry::{Point, Rect};
 use crate::reactive::runtime::{with_runtime, EffectId, NodeId, OwnerId, Runtime};
 use crate::reactive::scope::Scope;
-use crate::reactive::{ANIM_STEPS, MAX_CHILDREN, TEXT_CAP, VISIBLE};
+use crate::reactive::{MAX_CHILDREN, TEXT_CAP};
 use heapless::Vec;
+
+// --- carousel behavior (centered window + crude slide); NOT memory capacities ---
+/// Rows shown at once in a carousel (the selection sits in the middle).
+pub const VISIBLE: usize = 3;
+/// Frames in the crude carousel slide animation.
+pub const ANIM_STEPS: u8 = 3;
 
 /// Mark a node dirty (idempotent). Used when focus moves so the affected buttons repaint.
 fn mark_dirty(rt: &mut Runtime<'_>, node: Option<NodeId>) {
