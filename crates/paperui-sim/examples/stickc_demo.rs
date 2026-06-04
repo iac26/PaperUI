@@ -9,8 +9,8 @@ use paperui_tft::TftTheme;
 use static_cell::StaticCell;
 
 fn main() {
-    // 1 signal, 3 nodes (text+button+col), 2 effects (text + handler), 1 owner.
-    static STORAGE: StaticCell<Storage<1, 3, 2, 1>> = StaticCell::new();
+    // 1 signal, 3 nodes (text+button+col), 2 effects (text + handler), 1 owner, 1 anim (headroom).
+    static STORAGE: StaticCell<Storage<1, 3, 2, 1, 1>> = StaticCell::new();
     install(STORAGE.init(Storage::new()));
     let cx = Scope::root();
     let count = cx.signal(0i32);

@@ -174,7 +174,7 @@ impl<T: Animatable> Animated<T> {
 
 /// Advance every active animator to `now`: interpolate, write the signal (dirtying subscribers),
 /// dirty any `dirty_node`, and deactivate + snap to `to` once the duration elapses.
-pub(crate) fn advance_anims(rt: &mut Runtime, now: u32) {
+pub fn advance_anims(rt: &mut Runtime, now: u32) {
     rt.now_ms = now;
     for i in 0..rt.animators.len() {
         if !rt.animators[i].active {

@@ -38,7 +38,13 @@ mod signal;
 pub use signal::{ReactiveValue, Signal};
 
 mod anim;
-pub use anim::{Anim, Animated, Easing};
+pub use anim::{advance_anims, Anim, Animated, Easing};
+
+/// Convenience wrapper: advance every active animator to `now_ms` in one call, without
+/// exposing `with_runtime` to external crates. Reachable as `paperui::reactive::tick_anims`.
+pub fn tick_anims(now: u32) {
+    with_runtime(|rt| advance_anims(rt, now));
+}
 
 mod scope;
 pub use scope::{use_state, Scope};

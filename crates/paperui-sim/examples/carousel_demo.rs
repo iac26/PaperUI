@@ -11,8 +11,8 @@ use static_cell::StaticCell;
 
 fn main() {
     // 9 nodes (6 buttons + carousel + title + col), 6 effects (button handlers), 1 owner;
-    // signals:1 is harmless headroom (this demo has none).
-    static STORAGE: StaticCell<Storage<1, 9, 6, 1>> = StaticCell::new();
+    // signals:1 is harmless headroom (this demo has none); 1 anim for the slide tween.
+    static STORAGE: StaticCell<Storage<1, 9, 6, 1, 1>> = StaticCell::new();
     install(STORAGE.init(Storage::new()));
     let cx = Scope::root();
 
