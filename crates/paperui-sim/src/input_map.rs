@@ -5,11 +5,13 @@ use embedded_graphics_simulator::sdl2::Keycode;
 use paperui::reactive::UiEvent;
 use paperui::Point;
 
-/// Map a key press to a UI event. Tab/Right/Down navigate focus; Enter/Space activate.
+/// Map a key press to a UI event. Tab/Right/Down step focus forward, Left/Up step it back;
+/// Enter/Space activate.
 /// `Esc` is intentionally NOT mapped here — the loop matches it directly to quit.
 pub(crate) fn map_key(k: Keycode) -> Option<UiEvent> {
     match k {
         Keycode::Tab | Keycode::Right | Keycode::Down => Some(UiEvent::FocusNext),
+        Keycode::Left | Keycode::Up => Some(UiEvent::FocusPrev),
         Keycode::Return | Keycode::KpEnter | Keycode::Space => Some(UiEvent::Activate),
         _ => None,
     }
@@ -29,6 +31,8 @@ mod tests {
         assert_eq!(map_key(Keycode::Tab), Some(UiEvent::FocusNext));
         assert_eq!(map_key(Keycode::Right), Some(UiEvent::FocusNext));
         assert_eq!(map_key(Keycode::Down), Some(UiEvent::FocusNext));
+        assert_eq!(map_key(Keycode::Left), Some(UiEvent::FocusPrev));
+        assert_eq!(map_key(Keycode::Up), Some(UiEvent::FocusPrev));
         assert_eq!(map_key(Keycode::Return), Some(UiEvent::Activate));
         assert_eq!(map_key(Keycode::Space), Some(UiEvent::Activate));
         assert_eq!(map_key(Keycode::A), None);

@@ -15,11 +15,13 @@ fn mark_dirty(rt: &mut Runtime, node: Option<NodeId>) {
     }
 }
 
-/// Hit-test: run the handler of the `Button` whose laid-out `bounds` contain `p`, focus it,
-/// and dirty the old + new focused buttons so the highlight repaints. On overlap the LAST
-/// matching button (latest in the arena = drawn on top) wins; no-op when no button is hit.
-/// Focus/dirty are set inside the lock; the handler runs OUTSIDE it (take-out / put-back),
-/// so there is no `with_runtime` nesting — matching `invoke_handler_of_focus`.
+/// Hit-test a pointer/touch, then run the handler of the `Button` whose laid-out `bounds`
+/// contain `p`. If that button lives in a carousel, the carousel scrolls so the clicked row
+/// becomes the centered selection (animated, like an arrow press) and selection stays == focus;
+/// a plain button simply takes focus. Only the VISIBLE rows are on-screen, so a carousel click is
+/// always within ±(VISIBLE/2) slots of center. On overlap the LAST matching button (latest in the
+/// arena = drawn on top) wins; no-op when no button is hit. Focus/selection are set inside the
+/// lock; the handler runs OUTSIDE it (take-out / put-back), matching `invoke_handler_of_focus`.
 pub(crate) fn invoke_handler_at(p: Point) {
     let hit = with_runtime(|rt| {
         let mut found = None;
@@ -28,13 +30,24 @@ pub(crate) fn invoke_handler_at(p: Point) {
                 found = Some(NodeId(i as u16));
             }
         }
-        if let Some(id) = found {
-            let old = rt.focus;
-            rt.focus = Some(id);
-            mark_dirty(rt, old);
-            mark_dirty(rt, Some(id));
+        let id = found?;
+        match carousel_owning(rt, id) {
+            Some(cnode) => {
+                // Re-center the clicked row; delta 0 means it's already the centered selection.
+                if let Some(delta) = carousel_slot_delta(rt, cnode, id) {
+                    if delta != 0 {
+                        carousel_nav_inner(rt, cnode, delta);
+                    }
+                }
+            }
+            None => {
+                let old = rt.focus;
+                rt.focus = Some(id);
+                mark_dirty(rt, old);
+                mark_dirty(rt, Some(id));
+            }
         }
-        found
+        Some(id)
     });
     if let Some(node) = hit {
         crate::reactive::runtime::invoke_handler_of(node);
@@ -127,15 +140,39 @@ fn focus_prev_inner(rt: &mut Runtime) {
     }
 }
 
+/// The Carousel node that has `node` among its children, else `None`.
+fn carousel_owning(rt: &Runtime, node: NodeId) -> Option<NodeId> {
+    for (i, n) in rt.nodes.iter().enumerate() {
+        if let Kind::Carousel { children, .. } = &n.kind {
+            if children.contains(&node) {
+                return Some(NodeId(i as u16));
+            }
+        }
+    }
+    None
+}
+
 /// The Carousel node that OWNS the current focus, else `None`. Returning `None` when no carousel
 /// owns the focus lets `nav` fall back to plain focus cycling — and keeps the shared global test
 /// arena honest (leftover carousels never hijack a non-carousel focus).
 fn find_carousel(rt: &Runtime) -> Option<NodeId> {
-    let focus = rt.focus?;
-    for (i, node) in rt.nodes.iter().enumerate() {
-        if let Kind::Carousel { children, .. } = &node.kind {
-            if children.contains(&focus) {
-                return Some(NodeId(i as u16));
+    carousel_owning(rt, rt.focus?)
+}
+
+/// How far `target` sits from the centered (selected) slot in `cnode`'s visible window: the
+/// signed slot distance (for VISIBLE = 3, top slot = -1, center = 0, bottom = +1), or `None`
+/// if `target` is not in the currently visible window. Used to map a click on a visible row to
+/// the carousel nav delta that re-centers it.
+fn carousel_slot_delta(rt: &Runtime, cnode: NodeId, target: NodeId) -> Option<i32> {
+    if let Kind::Carousel { children, offset, .. } = &rt.nodes[cnode.0 as usize].kind {
+        let n = children.len();
+        if n == 0 {
+            return None;
+        }
+        let center = VISIBLE as i32 / 2;
+        for k in 0..VISIBLE {
+            if children[(*offset + k) % n] == target {
+                return Some(k as i32 - center);
             }
         }
     }
@@ -487,6 +524,40 @@ mod tests {
             assert_eq!(*anim_frame, crate::reactive::ANIM_STEPS);
         });
         with_runtime(|rt| assert_eq!(rt.focus, Some(items[1]), "focus follows the centered item"));
+        for _ in 0..=(crate::reactive::ANIM_STEPS as usize) {
+            with_runtime(|rt| step_carousel_anim(rt));
+        }
+        cx.dispose();
+    }
+
+    #[test]
+    fn click_on_a_visible_row_centers_and_activates_it() {
+        use crate::reactive::layout::layout;
+        let cx = Scope::root();
+        let hits = cx.signal(0i32);
+        // After select_first the visible slots are top=item5, center=item0, bottom=item1, so
+        // item 1 is the bottom (clickable) row; it bumps `hits` when its handler runs.
+        let items = [
+            button(cx, "0", || {}),
+            button(cx, "1", move || hits.update(|c| *c += 1)),
+            button(cx, "2", || {}), button(cx, "3", || {}),
+            button(cx, "4", || {}), button(cx, "5", || {}),
+        ];
+        let car = carousel(cx, &items);
+        carousel_select_first(car);
+        // Lay out far from other tests' nodes (the global arena is shared) so the hit-test on the
+        // click point can only match our own row.
+        layout(car, Rect::new(5000, 5000, 240, 135));
+        let b = with_runtime(|rt| rt.nodes[items[1].0 as usize].bounds);
+        invoke_handler_at(Point::new(b.x + b.w / 2, b.y + b.h / 2));
+        with_runtime(|rt| {
+            assert_eq!(rt.focus, Some(items[1]), "clicked row becomes the focus");
+            if let Kind::Carousel { selected, .. } = &rt.nodes[car.0 as usize].kind {
+                assert_eq!(*selected, 1, "clicked row is re-centered as the selection");
+            }
+        });
+        assert_eq!(hits.get(), 1, "select + activate: the row's handler also runs");
+        // Drain the armed slide so the shared runtime isn't left animating for the next test.
         for _ in 0..=(crate::reactive::ANIM_STEPS as usize) {
             with_runtime(|rt| step_carousel_anim(rt));
         }

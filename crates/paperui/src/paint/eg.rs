@@ -5,7 +5,7 @@
 use embedded_graphics::mono_font::{ascii::FONT_6X9, MonoTextStyle};
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::*;
-use embedded_graphics::primitives::{PrimitiveStyle, PrimitiveStyleBuilder, Rectangle};
+use embedded_graphics::primitives::{PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StrokeAlignment};
 use embedded_graphics::text::{Baseline, Text};
 use crate::{Canvas, Color, FontId, Point as PPoint, Rect, Size as PSize};
 
@@ -41,9 +41,13 @@ where
     }
 
     fn stroke_rect(&mut self, r: Rect, color: Color, width: u16) {
+        // Inside alignment: the whole stroke stays within `r`. With the default centered
+        // alignment, half the stroke spills outside `r`, and a later same-rect `fill_rect`
+        // (the surgical repaint on focus change) can't cover it — leaving border ghosts.
         let style: PrimitiveStyle<Rgb565> = PrimitiveStyleBuilder::new()
             .stroke_color(to_rgb565(color))
             .stroke_width(width as u32)
+            .stroke_alignment(StrokeAlignment::Inside)
             .build();
         let _ = rect_to_eg(r).into_styled(style).draw(self.target);
     }

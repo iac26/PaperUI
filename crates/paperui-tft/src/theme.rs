@@ -1,6 +1,6 @@
 //! The TFT (full-color) theme — this board addon's default look: black wallpaper, orange highlight.
 use paperui::{
-    Canvas, Color, Constraints, DrawCtx, FontId, Point, Size, Theme, UpdateHint, WidgetTheme,
+    Canvas, Color, Constraints, DrawCtx, FontId, Point, Size, UpdateHint, WidgetTheme,
     FONT0_H, FONT0_W,
 };
 
@@ -15,7 +15,6 @@ const LABEL: Color = Color::rgb(0xE0, 0xE0, 0xE0);
 
 /// The full-color TFT look: black wallpaper, orange highlight on the focused control.
 pub struct TftTheme;
-impl Theme for TftTheme {}
 
 impl<C: Canvas> WidgetTheme<C> for TftTheme {
     fn measure_button(&self, label: &str, c: Constraints) -> Size {

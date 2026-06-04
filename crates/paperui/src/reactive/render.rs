@@ -3,15 +3,12 @@
 //! Drawing happens OUTSIDE `with_runtime` (we snapshot node data first), so the global lock
 //! is never held across a canvas/theme call and never nests.
 
-use crate::canvas::Canvas;
-use crate::draw::DrawCtx;
 use crate::geometry::Rect;
+use crate::paint::{Canvas, DrawCtx, UpdateHint, WidgetTheme};
 use crate::reactive::layout::{layout, CAROUSEL_ROW_H, CAROUSEL_ROW_PITCH};
 use crate::reactive::node::Kind;
 use crate::reactive::runtime::{run_effect_of, with_runtime, NodeId};
 use crate::reactive::{ANIM_STEPS, MAX_CHILDREN, TEXT_CAP, VISIBLE};
-use crate::types::UpdateHint;
-use crate::widget_theme::WidgetTheme;
 
 /// What a node needs drawn, snapshotted out of the runtime lock.
 enum Draw {
@@ -76,8 +73,9 @@ fn draw_subtree<C: Canvas, T: WidgetTheme<C>>(node: NodeId, canvas: &mut C, them
 }
 
 /// Render only dirty nodes: re-run their (Text) effects, reflow within the root's current
-/// bounds, then draw just the dirty nodes. This is the surgical update.
-pub fn render_frame<C: Canvas, T: WidgetTheme<C>>(root: NodeId, canvas: &mut C, theme: &T) {
+/// bounds, then draw just the dirty nodes. This is the surgical update. Internal: callers
+/// drive a frame through [`render_tick`].
+fn render_frame<C: Canvas, T: WidgetTheme<C>>(root: NodeId, canvas: &mut C, theme: &T) {
     let dirty = with_runtime(|rt| {
         let d = rt.dirty.clone();
         rt.dirty.clear();
@@ -103,8 +101,9 @@ pub fn render_frame_full<C: Canvas, T: WidgetTheme<C>>(root: NodeId, canvas: &mu
 
 /// Render one frame of a carousel slide: clear the carousel region, draw the visible window plus
 /// the one incoming row shifted by the current `slide`, then repaint non-carousel root children
-/// (e.g. the status line) on top as a crude clip mask. Call once per loop while animating.
-pub fn render_anim_frame<C: Canvas, T: WidgetTheme<C>>(root: NodeId, canvas: &mut C, theme: &T) {
+/// (e.g. the status line) on top as a crude clip mask. Internal: [`render_tick`] calls this once
+/// per loop while a slide is animating.
+fn render_anim_frame<C: Canvas, T: WidgetTheme<C>>(root: NodeId, canvas: &mut C, theme: &T) {
     let info = with_runtime(|rt| {
         let cnode = rt
             .nodes
@@ -150,6 +149,14 @@ pub fn render_anim_frame<C: Canvas, T: WidgetTheme<C>>(root: NodeId, canvas: &mu
         }
     }
 
+    // Clip the slide: the incoming/outgoing slots are drawn up to one pitch beyond `cb`, and
+    // there is no real clip primitive, so repaint the background over the one-pitch strips just
+    // above and below the viewport. Without this, each frame's overflow accumulates as shadows
+    // in the gap above the carousel and the wallpaper below.
+    let top = (cb.y - CAROUSEL_ROW_PITCH).max(0);
+    canvas.fill_rect(Rect::new(cb.x, top, cb.w, cb.y - top), theme.background());
+    canvas.fill_rect(Rect::new(cb.x, cb.y + cb.h, cb.w, CAROUSEL_ROW_PITCH), theme.background());
+
     // Overpaint mask: redraw root's non-carousel children (the status overlay) on top.
     let overlays = with_runtime(|rt| match &rt.nodes[root.0 as usize].kind {
         Kind::Column { children, .. } | Kind::Row { children, .. } => {
@@ -168,18 +175,29 @@ pub fn render_anim_frame<C: Canvas, T: WidgetTheme<C>>(root: NodeId, canvas: &mu
     }
 }
 
+/// One frame of the run loop, shared by the embedded `driver::run` and the desktop `run_sim`.
+/// If a carousel slide is animating, advance it one frame; otherwise surgically repaint any
+/// dirty nodes (a no-op when nothing is dirty).
+pub fn render_tick<C: Canvas, T: WidgetTheme<C>>(root: NodeId, canvas: &mut C, theme: &T) {
+    use crate::reactive::node::{any_carousel_animating, step_carousel_anim};
+    if with_runtime(|rt| any_carousel_animating(rt)) {
+        render_anim_frame(root, canvas, theme);
+        with_runtime(step_carousel_anim);
+    } else if with_runtime(|rt| !rt.dirty.is_empty()) {
+        render_frame(root, canvas, theme);
+    }
+}
+
 #[cfg(all(test, feature = "mock"))]
 mod tests {
     use super::*;
-    use crate::canvas::{FONT0_H, FONT0_W};
-    use crate::geometry::{Point, Size};
+    use crate::geometry::{Constraints, Point, Size};
+    use crate::paint::{Color, FontId, FONT0_H, FONT0_W};
     use crate::reactive::node::{button, carousel, carousel_select_first, col, nav, text, text_static};
     use crate::reactive::scope::Scope;
-    use crate::types::{Color, Constraints, FontId};
-    use crate::{DrawOp, MockCanvas, Theme};
+    use crate::{DrawOp, MockCanvas};
 
     struct TestTheme;
-    impl Theme for TestTheme {}
     impl WidgetTheme<MockCanvas> for TestTheme {
         fn measure_button(&self, label: &str, _c: Constraints) -> Size {
             Size::new(label.chars().count() as i16 * FONT0_W + 12, FONT0_H + 12)

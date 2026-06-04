@@ -1,6 +1,5 @@
 use paperui::{
-    Button, Color, Constraints, DrawCtx, DrawOp, MockCanvas, Rect, Size, UpdateHint, Widget,
-    WidgetTheme,
+    Color, Constraints, DrawCtx, DrawOp, MockCanvas, Rect, Size, UpdateHint, WidgetTheme,
 };
 use paperui_tft::TftTheme;
 
@@ -17,11 +16,10 @@ fn default_theme_draws_button_background_border_and_label() {
     let theme = TftTheme;
     let mut canvas = MockCanvas::new();
     let mut hint = UpdateHint::None;
-    let btn = Button::new("OK");
     let bounds = Rect::new(0, 0, 28, 20);
     {
         let mut ctx = DrawCtx::new(&mut canvas, bounds, /*focused*/ false, &mut hint);
-        Widget::<MockCanvas, TftTheme>::draw(&btn, &mut ctx, &theme);
+        theme.draw_button(&mut ctx, "OK", false);
     }
     // Expect: filled background, a border stroke, then the label text.
     assert!(matches!(canvas.ops[0], DrawOp::FillRect(_, _)));
@@ -36,10 +34,9 @@ fn focused_button_uses_a_distinct_border_but_same_op_shape() {
     let theme = TftTheme;
     let mut canvas = MockCanvas::new();
     let mut hint = UpdateHint::None;
-    let btn = Button::new("OK");
     {
         let mut ctx = DrawCtx::new(&mut canvas, Rect::new(0, 0, 28, 20), /*focused*/ true, &mut hint);
-        Widget::<MockCanvas, TftTheme>::draw(&btn, &mut ctx, &theme);
+        theme.draw_button(&mut ctx, "OK", false);
     }
     if let DrawOp::StrokeRect(_, color, width) = canvas.ops[1] {
         assert_eq!(width, 2, "focused border is thicker");

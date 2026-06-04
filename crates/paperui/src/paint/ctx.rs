@@ -1,10 +1,11 @@
-use crate::canvas::Canvas;
+//! The per-draw context handed to themes, plus the e-ink refresh-quality hint it carries.
+use super::Canvas;
 use crate::geometry::Rect;
-use crate::types::UpdateHint;
 
-/// Opaque theme marker. The core knows nothing beyond this; the widgets crate
-/// defines the real `WidgetTheme` render contract as a sub-trait.
-pub trait Theme {}
+/// Semantic e-ink refresh-quality hint, set by the theme during draw.
+/// Ordered worst-last so a region can take the max. Non-e-ink renderers ignore it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum UpdateHint { None, Mono, #[default] Fast, Text, Quality }
 
 /// Per-draw context handed to a widget's `draw`. Carries the canvas, the widget's
 /// absolute bounds, focus state, and an accumulator for the e-ink UpdateHint.
@@ -23,5 +24,16 @@ impl<'a, C: Canvas> DrawCtx<'a, C> {
     /// The region keeps the maximum (worst) hint requested.
     pub fn require_hint(&mut self, h: UpdateHint) {
         if h > *self.hint { *self.hint = h; }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn update_hint_is_ordered_for_worst_case_merge() {
+        assert!(UpdateHint::Quality > UpdateHint::Mono);
+        assert_eq!(UpdateHint::Mono.max(UpdateHint::Text), UpdateHint::Text);
     }
 }

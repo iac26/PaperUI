@@ -11,9 +11,10 @@ pub struct SimConfig {
 }
 
 impl SimConfig {
-    /// M5StickC Plus2: 135×240 color TFT, upscaled 3×.
+    /// M5StickC Plus2: 135×240 color TFT driven in landscape (rotated 90°), so the logical
+    /// surface the UI draws into is 240×135. Upscaled 3×.
     pub fn stickc() -> Self {
-        Self { size: Size::new(135, 240), scale: 3, title: "PaperUI — StickC preview" }
+        Self { size: Size::new(240, 135), scale: 3, title: "PaperUI — StickC preview" }
     }
 
     /// M5Paper: 540×960 e-ink panel, 1× (renders the mono theme as grayscale).
@@ -29,7 +30,7 @@ mod tests {
     #[test]
     fn stickc_preset_matches_the_panel() {
         let c = SimConfig::stickc();
-        assert_eq!(c.size, Size::new(135, 240));
+        assert_eq!(c.size, Size::new(240, 135), "landscape (rotated) logical surface");
         assert_eq!(c.scale, 3);
     }
 }

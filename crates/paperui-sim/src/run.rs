@@ -10,7 +10,7 @@ use embedded_graphics_simulator::{
 };
 
 use paperui::reactive::{
-    dispatch, has_dirty, layout, render_frame, render_frame_full, NodeId, UiEvent,
+    dispatch, layout, render_frame_full, render_tick, NodeId, UiEvent,
 };
 use paperui::{EgCanvas, Rect, WidgetTheme};
 
@@ -56,9 +56,11 @@ where
                 _ => {}
             }
         }
-        if has_dirty() {
+        // Tick the reactive core every frame: advances a carousel slide if one is animating,
+        // else surgically repaints dirty nodes (a no-op when idle).
+        {
             let mut canvas = EgCanvas::new(&mut display);
-            render_frame(root, &mut canvas, theme);
+            render_tick(root, &mut canvas, theme);
         }
         thread::sleep(Duration::from_millis(16)); // ~60 Hz; avoid a busy spin
     }

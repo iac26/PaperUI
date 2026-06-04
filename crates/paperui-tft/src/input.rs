@@ -1,16 +1,27 @@
-use crate::types::ButtonEvent;
-
-/// Input abstraction (spec §5.4). Generic over the host loop's screen/context type
-/// so core names no device type. Device backends implement `poll`.
-pub trait InputSource<Ctx> {
-    fn poll(&mut self, ctx: &mut Ctx);
-    fn on_tree_changed(&mut self) {}
-}
+//! Pure debounce/gesture detection for this board's physical buttons. `buttons.rs` feeds
+//! raw GPIO state in; the board then maps the resulting gestures to the engine's `UiEvent`s.
+//! Hardware-agnostic and deterministic (no esp-hal), so it stays host-testable.
 
 /// Press duration (ms) at/after which a press becomes a Hold (not a Click).
 pub const HOLD_MS: u32 = 600;
 /// Max gap (ms) between a Click's release and the next press to form a DoubleClick.
 pub const DOUBLE_MS: u32 = 250;
+
+/// The M5StickC's physical buttons.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ButtonId {
+    A,
+    B,
+    C,
+}
+
+/// A gesture produced by [`GestureState`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ButtonEvent {
+    Click,
+    Hold,
+    DoubleClick,
+}
 
 /// Pure debounce/gesture state machine for ONE button. Fed `(down, now_ms)` each poll;
 /// returns at most one event per transition. No allocation, deterministic in tests.

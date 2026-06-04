@@ -2,8 +2,8 @@
 //! A leaf (Text/Button) is chars*FONT0_W + 2*PAD wide, FONT0_H + 2*PAD tall. A Column stacks
 //! children (max width, summed heights + spacing); a Row is the transpose.
 
-use crate::canvas::{FONT0_H, FONT0_W};
 use crate::geometry::{Rect, Size};
+use crate::paint::{FONT0_H, FONT0_W};
 use crate::reactive::node::Kind;
 use crate::reactive::runtime::{with_runtime, NodeId, Runtime};
 use crate::reactive::VISIBLE;

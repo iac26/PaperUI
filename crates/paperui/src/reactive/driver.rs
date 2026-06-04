@@ -2,12 +2,11 @@
 //! Generic over EventSource so an async (embassy) driver can drop in at a later layer
 //! without touching the engine. Layer #1 is intentionally blocking.
 
-use crate::canvas::Canvas;
 use crate::geometry::Point;
-use crate::reactive::node::{any_carousel_animating, invoke_handler_at, invoke_handler_of_focus, nav, step_carousel_anim};
-use crate::reactive::render::{render_anim_frame, render_frame, render_frame_full};
-use crate::reactive::runtime::{with_runtime, NodeId};
-use crate::widget_theme::WidgetTheme;
+use crate::paint::{Canvas, WidgetTheme};
+use crate::reactive::node::{invoke_handler_at, invoke_handler_of_focus, nav};
+use crate::reactive::render::{render_frame_full, render_tick};
+use crate::reactive::runtime::NodeId;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum UiEvent {
@@ -34,12 +33,6 @@ pub fn dispatch(ev: UiEvent) {
     }
 }
 
-/// True when at least one node is marked dirty and a `render_frame` is pending. Lets an
-/// external loop render only when there is work to do (`dirty` is private to the runtime).
-pub fn has_dirty() -> bool {
-    with_runtime(|rt| !rt.dirty.is_empty())
-}
-
 /// The synchronous app loop. Never returns. Renders once, then polls the source, dispatches
 /// events, and re-renders only when something is dirty.
 ///
@@ -57,16 +50,7 @@ where
         while let Some(ev) = src.poll(now_ms) {
             dispatch(ev);
         }
-        let animating = with_runtime(|rt| any_carousel_animating(rt));
-        if animating {
-            render_anim_frame(root, canvas, theme);
-            with_runtime(step_carousel_anim);
-        } else {
-            let dirty_pending = with_runtime(|rt| !rt.dirty.is_empty());
-            if dirty_pending {
-                render_frame(root, canvas, theme);
-            }
-        }
+        render_tick(root, canvas, theme);
         now_ms = now_ms.wrapping_add(5);
     }
 }
@@ -82,6 +66,7 @@ pub(crate) fn pump_until_empty(src: &mut impl EventSource) {
 mod tests {
     use super::*;
     use crate::reactive::node::{button, carousel, carousel_select_first, col, text, text_static};
+    use crate::reactive::runtime::with_runtime;
     use crate::reactive::scope::Scope;
     use crate::geometry::{Point, Rect};
 
@@ -124,7 +109,7 @@ mod tests {
     }
 
     #[test]
-    fn has_dirty_tracks_pending_work() {
+    fn signal_change_dirties_its_subscriber() {
         let cx = Scope::root();
         let count = cx.signal(0i32);
         let _t = text(cx, move || {
@@ -133,9 +118,9 @@ mod tests {
             s
         });
         with_runtime(|rt| rt.dirty.clear());
-        assert!(!has_dirty(), "no work pending right after a clear");
+        assert!(with_runtime(|rt| rt.dirty.is_empty()), "no work pending right after a clear");
         count.set(1);
-        assert!(has_dirty(), "a signal change dirties its subscriber");
+        assert!(with_runtime(|rt| !rt.dirty.is_empty()), "a signal change dirties its subscriber");
         cx.dispose();
     }
 

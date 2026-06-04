@@ -6,3 +6,7 @@ rustflags = ["-C", "link-arg=-Tlinkall.x"]
 
 [env]
 ESP_LOG = "info"
+# The reactive runtime is a single global `static`, so the whole host test suite shares one
+# runtime instance (focus, dirty set, node arena). Tests must not interleave on it — force
+# libtest to run serially. Only affects test binaries; the device build ignores it.
+RUST_TEST_THREADS = "1"
