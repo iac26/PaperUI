@@ -76,6 +76,17 @@ pub struct Node {
     pub owner: OwnerId,
 }
 
+/// A const placeholder occupying the unused tail of an app's `[Node; NN]` arena. `push_node`
+/// overwrites slot `len` before it is ever read, so this value is never rendered or laid out.
+pub(crate) const EMPTY_NODE: Node = Node {
+    kind: Kind::Text {
+        src: TextSource::Static(""),
+        content: heapless::String::new(),
+    },
+    bounds: Rect::new(0, 0, 0, 0),
+    owner: OwnerId(0),
+};
+
 pub fn text_static(cx: Scope, s: &'static str) -> NodeId {
     let mut content = heapless::String::<TEXT_CAP>::new();
     let _ = content.push_str(s); // truncates past TEXT_CAP; acceptable for Layer #1
@@ -367,6 +378,12 @@ pub fn carousel_select_first(c: NodeId) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn empty_node_is_const_array_initializable() {
+        const _NODES: [Node; 3] = [EMPTY_NODE, EMPTY_NODE, EMPTY_NODE];
+        assert!(matches!(_NODES[0].kind, Kind::Text { .. }));
+    }
 
     #[test]
     fn col_of_two_texts_allocates_three_nodes() {

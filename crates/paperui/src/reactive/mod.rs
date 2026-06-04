@@ -21,10 +21,16 @@ pub const CLOSURE_WORDS: usize = 8;
 mod bounded_fn;
 pub use bounded_fn::BoundedFn;
 
+mod arena;
+pub(crate) use arena::Arena;
+
 mod runtime;
 pub use runtime::{EffectId, NodeId, OwnerId, SignalId};
 #[allow(unused_imports)]
 pub(crate) use runtime::with_runtime;
+
+mod storage;
+pub use storage::Storage;
 
 mod signal;
 pub use signal::{ReactiveValue, Signal};

@@ -32,7 +32,7 @@ pub(crate) struct EffectSlot {
     pub in_use: bool,
 }
 
-const EMPTY_EFFECT: EffectSlot = EffectSlot { func: None, owner: OwnerId(0), in_use: false };
+pub(crate) const EMPTY_EFFECT: EffectSlot = EffectSlot { func: None, owner: OwnerId(0), in_use: false };
 
 pub(crate) struct Runtime {
     pub signals: [SignalSlot; N_SIGNALS],
@@ -45,7 +45,7 @@ pub(crate) struct Runtime {
     pub effects: [EffectSlot; N_EFFECTS],
 }
 
-const EMPTY_SIGNAL: SignalSlot = SignalSlot {
+pub(crate) const EMPTY_SIGNAL: SignalSlot = SignalSlot {
     value: [MaybeUninit::uninit(); SIGNAL_SLOT_WORDS],
     type_id: None,
     subs: Vec::new(),
