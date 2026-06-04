@@ -3,11 +3,15 @@
 //! the count region repaints. Run with:
 //!   cargo run -p paperui-sim --example stickc_demo --target x86_64-unknown-linux-gnu
 
-use paperui::reactive::{button, col, text, Scope};
+use paperui::reactive::{button, col, install, text, Scope, Storage};
 use paperui_sim::{run_sim, SimConfig};
 use paperui_tft::TftTheme;
+use static_cell::StaticCell;
 
 fn main() {
+    // 1 signal, 3 nodes (text+button+col), 2 effects (text + handler), 1 owner.
+    static STORAGE: StaticCell<Storage<1, 3, 2, 1>> = StaticCell::new();
+    install(STORAGE.init(Storage::new()));
     let cx = Scope::root();
     let count = cx.signal(0i32);
 

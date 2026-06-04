@@ -4,11 +4,16 @@
 //! animation), wrapping at both ends. Run with:
 //!   cargo run -p paperui-sim --example carousel_demo --target x86_64-unknown-linux-gnu
 
-use paperui::reactive::{button, carousel, carousel_select_first, col, text_static, Scope};
+use paperui::reactive::{button, carousel, carousel_select_first, col, install, text_static, Scope, Storage};
 use paperui_sim::{run_sim, SimConfig};
 use paperui_tft::TftTheme;
+use static_cell::StaticCell;
 
 fn main() {
+    // 9 nodes (6 buttons + carousel + title + col), 6 effects (button handlers), 1 owner;
+    // signals:1 is harmless headroom (this demo has none).
+    static STORAGE: StaticCell<Storage<1, 9, 6, 1>> = StaticCell::new();
+    install(STORAGE.init(Storage::new()));
     let cx = Scope::root();
 
     // A carousel of selectable rooms. Empty handlers — this demo is about navigation + the slide.

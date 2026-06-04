@@ -32,6 +32,18 @@ pub(crate) use runtime::with_runtime;
 mod storage;
 pub use storage::{install, Storage};
 
+/// Name the four pool sizes in one place; expands to a `Storage<…>` TYPE so it reads well in a
+/// `StaticCell<storage!(…)>` declaration.
+/// All four keyword labels are required. Example:
+/// `static S: StaticCell<storage!(signals: 1, nodes: 4, effects: 2, owners: 1)> = StaticCell::new();`
+#[macro_export]
+macro_rules! storage {
+    (signals: $s:expr, nodes: $n:expr, effects: $e:expr, owners: $o:expr $(,)?) => {
+        $crate::reactive::Storage<{ $s }, { $n }, { $e }, { $o }>
+    };
+}
+pub use crate::storage;
+
 mod signal;
 pub use signal::{ReactiveValue, Signal};
 
@@ -49,3 +61,17 @@ pub use render::{render_frame_full, render_tick};
 
 mod driver;
 pub use driver::{dispatch, run, EventSource, UiEvent};
+
+#[cfg(test)]
+mod macro_tests {
+    use crate::reactive::runtime::fresh_runtime;
+    #[test]
+    fn storage_macro_expands_to_a_constructible_type() {
+        fresh_runtime();
+        let _s: crate::storage!(signals: 1, nodes: 2, effects: 1, owners: 1) =
+            crate::reactive::Storage::new();
+        // also verify the reactive-module re-export path resolves
+        let _s2: crate::reactive::storage!(signals: 1, nodes: 1, effects: 1, owners: 1) =
+            crate::reactive::Storage::new();
+    }
+}
