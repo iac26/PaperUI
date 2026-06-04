@@ -3,7 +3,7 @@
 
 use crate::reactive::bounded_fn::BoundedFn;
 use crate::reactive::node::{effect_of_text, handler_of_button, Node};
-use crate::reactive::{CLOSURE_WORDS, FANOUT, N_EFFECTS, N_NODES, N_OWNERS, N_SIGNALS, SIGNAL_SLOT_WORDS};
+use crate::reactive::{Arena, CLOSURE_WORDS, FANOUT, SIGNAL_SLOT_WORDS};
 use core::cell::RefCell;
 use core::mem::MaybeUninit;
 use critical_section::Mutex;
@@ -34,15 +34,15 @@ pub(crate) struct EffectSlot {
 
 pub(crate) const EMPTY_EFFECT: EffectSlot = EffectSlot { func: None, owner: OwnerId(0), in_use: false };
 
-pub(crate) struct Runtime {
-    pub signals: [SignalSlot; N_SIGNALS],
-    pub owners_used: [bool; N_OWNERS],
+pub(crate) struct Runtime<'a> {
+    pub signals: &'a mut [SignalSlot],
+    pub effects: &'a mut [EffectSlot],
+    pub owners_used: &'a mut [bool],
+    pub nodes: Arena<'a, Node>,
+    pub dirty: Arena<'a, NodeId>,
     pub current_effect: Option<NodeId>,
     pub focus: Option<NodeId>,
-    pub dirty: Vec<NodeId, N_NODES>,
     pub epoch: u32,
-    pub nodes: Vec<Node, N_NODES>,
-    pub effects: [EffectSlot; N_EFFECTS],
 }
 
 pub(crate) const EMPTY_SIGNAL: SignalSlot = SignalSlot {
@@ -53,23 +53,30 @@ pub(crate) const EMPTY_SIGNAL: SignalSlot = SignalSlot {
     in_use: false,
 };
 
-static RUNTIME: Mutex<RefCell<Runtime>> = Mutex::new(RefCell::new(Runtime {
-    signals: [EMPTY_SIGNAL; N_SIGNALS],
-    owners_used: [false; N_OWNERS],
-    current_effect: None,
-    focus: None,
-    dirty: Vec::new(),
-    epoch: 0,
-    nodes: Vec::new(),
-    effects: [EMPTY_EFFECT; N_EFFECTS],
-}));
+static RUNTIME: Mutex<RefCell<Option<Runtime<'static>>>> = Mutex::new(RefCell::new(None));
 
-/// Run `f` with exclusive access to the runtime. NON-REENTRANT: never nest.
-pub(crate) fn with_runtime<R>(f: impl FnOnce(&mut Runtime) -> R) -> R {
-    critical_section::with(|cs| f(&mut RUNTIME.borrow_ref_mut(cs)))
+/// Install the engine's view of app-owned storage. Called once by `Storage::install`.
+pub(crate) fn install_view(rt: Runtime<'static>) {
+    critical_section::with(|cs| {
+        let mut guard = RUNTIME.borrow_ref_mut(cs);
+        debug_assert!(guard.is_none(), "paperui::reactive::install() called twice");
+        *guard = Some(rt);
+    });
 }
 
-impl Runtime {
+/// Run `f` with exclusive access to the runtime. NON-REENTRANT: never nest.
+/// Panics if `paperui::reactive::install` has not been called.
+pub(crate) fn with_runtime<R>(f: impl FnOnce(&mut Runtime<'_>) -> R) -> R {
+    critical_section::with(|cs| {
+        let mut guard = RUNTIME.borrow_ref_mut(cs);
+        let rt = guard
+            .as_mut()
+            .expect("paperui::reactive::install() must be called before building the UI");
+        f(rt)
+    })
+}
+
+impl Runtime<'_> {
     pub(crate) fn alloc_owner(&mut self) -> OwnerId {
         // OwnerId(0) is reserved as a sentinel "no real owner" (the EMPTY_SIGNAL placeholder
         // owner and the default). Real scopes start at 1 so a scope's dispose never sweeps
@@ -80,8 +87,8 @@ impl Runtime {
                 return OwnerId(i as u16);
             }
         }
-        debug_assert!(false, "owner arena exhausted (raise N_OWNERS)");
-        OwnerId((N_OWNERS - 1) as u16)
+        debug_assert!(false, "owner arena exhausted (raise the app's Storage)");
+        OwnerId((self.owners_used.len() - 1) as u16)
     }
 
     pub(crate) fn free_owner(&mut self, o: OwnerId) {
@@ -110,16 +117,41 @@ impl Runtime {
         // freed slot. Unreachable in Layer #1 (single-threaded, no dispose-from-within-effect);
         // before Layer #2 allows it, gate the put-back on the slot still being `in_use`.
     }
+
+    /// Return all pools to empty and clear cursors. Tests use this to isolate each case so the
+    /// append-only node arena never accumulates across the suite.
+    #[cfg(test)]
+    pub(crate) fn reset(&mut self) {
+        for s in self.signals.iter_mut() {
+            s.in_use = false;
+            s.subs.clear();
+            s.type_id = None;
+            s.owner = OwnerId(0);
+        }
+        for e in self.effects.iter_mut() {
+            e.in_use = false;
+            e.func = None;
+            e.owner = OwnerId(0);
+        }
+        for u in self.owners_used.iter_mut() {
+            *u = false;
+        }
+        self.nodes.clear();
+        self.dirty.clear();
+        self.current_effect = None;
+        self.focus = None;
+        self.epoch = 0;
+    }
 }
 
 /// A `TypeId` wrapper so `signal.rs` can hand the stored type into `alloc_signal`.
 pub(crate) struct TypeIdShim(pub core::any::TypeId);
 
-impl Runtime {
+impl Runtime<'_> {
     pub(crate) fn push_node(&mut self, node: Node) -> NodeId {
         let id = NodeId(self.nodes.len() as u16);
-        if self.nodes.push(node).is_err() {
-            debug_assert!(false, "node arena exhausted (raise N_NODES)");
+        if !self.nodes.push(node) {
+            debug_assert!(false, "node arena exhausted (raise the app's Storage NN)");
         }
         id
     }
@@ -134,12 +166,12 @@ impl Runtime {
                 return SignalId(i as u16);
             }
         }
-        debug_assert!(false, "signal arena exhausted (raise N_SIGNALS)");
-        SignalId((N_SIGNALS - 1) as u16)
+        debug_assert!(false, "signal arena exhausted (raise the app's Storage)");
+        SignalId((self.signals.len() - 1) as u16)
     }
 }
 
-impl Runtime {
+impl Runtime<'_> {
     pub(crate) fn alloc_effect(&mut self, owner: OwnerId, f: BoundedFn<CLOSURE_WORDS, ()>) -> EffectId {
         for (i, e) in self.effects.iter_mut().enumerate() {
             if !e.in_use {
@@ -149,8 +181,8 @@ impl Runtime {
                 return EffectId(i as u16);
             }
         }
-        debug_assert!(false, "effect arena exhausted (raise N_EFFECTS)");
-        EffectId((N_EFFECTS - 1) as u16)
+        debug_assert!(false, "effect arena exhausted (raise the app's Storage)");
+        EffectId((self.effects.len() - 1) as u16)
     }
 }
 
@@ -190,11 +222,26 @@ pub(crate) fn invoke_handler_of(node: NodeId) {
     }
 }
 
+/// Test-only: install a fixed, modestly-sized runtime ONCE for the whole (single-threaded) test
+/// binary, then reset it so each test starts empty. These are TEST sizes — they live here, not in
+/// the library, and only need to fit the largest single test (not the suite's sum).
+#[cfg(test)]
+pub(crate) fn fresh_runtime() {
+    use crate::reactive::storage::{install, Storage};
+    use static_cell::StaticCell;
+    static CELL: StaticCell<Storage<16, 64, 32, 16>> = StaticCell::new();
+    if let Some(storage) = CELL.try_init(Storage::new()) {
+        install(storage);
+    }
+    with_runtime(|rt| rt.reset());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn alloc_and_free_owner_round_trips() {
+        fresh_runtime();
         with_runtime(|rt| {
             let o = rt.alloc_owner();
             assert!(rt.owners_used[o.0 as usize]);

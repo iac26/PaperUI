@@ -76,21 +76,23 @@ fn draw_subtree<C: Canvas, T: WidgetTheme<C>>(node: NodeId, canvas: &mut C, them
 /// bounds, then draw just the dirty nodes. This is the surgical update. Internal: callers
 /// drive a frame through [`render_tick`].
 fn render_frame<C: Canvas, T: WidgetTheme<C>>(root: NodeId, canvas: &mut C, theme: &T) {
-    let dirty = with_runtime(|rt| {
-        let d = rt.dirty.clone();
-        rt.dirty.clear();
-        d
-    });
-    for &n in dirty.iter() {
-        run_effect_of(n); // recomputes Text content; no-op for non-reactive-text nodes
+    // Snapshot the dirty count and index the live set across the passes below. Precondition
+    // (Layer 1): reactive effects are read-only w.r.t. signals — none call `signal.set` during
+    // recompute — so the dirty set never grows here and indices [0..count) stay valid. If that
+    // is ever relaxed, the trailing `clear()` would silently drop nodes dirtied mid-frame; then
+    // this must instead drain only [0..count) (retain the tail) or loop until the set stabilizes.
+    let count = with_runtime(|rt| rt.dirty.len());
+    for i in 0..count {
+        let n = with_runtime(|rt| rt.dirty.as_slice()[i]);
+        run_effect_of(n);
     }
-    // Reflow within the root's current bounds so a Text whose content size changed re-places.
-    // (In a Column, text height is fixed, so siblings never shift; safe for Layer #1 layouts.)
     let area = with_runtime(|rt| rt.nodes[root.0 as usize].bounds);
     layout(root, area);
-    for &n in dirty.iter() {
+    for i in 0..count {
+        let n = with_runtime(|rt| rt.dirty.as_slice()[i]);
         draw_node(n, canvas, theme);
     }
+    with_runtime(|rt| rt.dirty.clear());
 }
 
 /// Full first render: draw the whole subtree, then clear any dirty accumulated during build.
@@ -194,6 +196,7 @@ mod tests {
     use crate::geometry::{Constraints, Point, Size};
     use crate::paint::{Color, FontId, FONT0_H, FONT0_W};
     use crate::reactive::node::{button, carousel, carousel_select_first, col, nav, text, text_static};
+    use crate::reactive::runtime::fresh_runtime;
     use crate::reactive::scope::Scope;
     use crate::{DrawOp, MockCanvas};
 
@@ -225,6 +228,7 @@ mod tests {
 
     #[test]
     fn changing_a_signal_repaints_only_the_dependent_text() {
+        fresh_runtime();
         let cx = Scope::root();
         let count = cx.signal(0i32);
         let root = col(cx, (
@@ -262,6 +266,7 @@ mod tests {
 
     #[test]
     fn focused_button_draws_with_focused_true() {
+        fresh_runtime();
         let cx = Scope::root();
         let b = button(cx, "X", || {});
         let root = col(cx, (text_static(cx, "t"), b));
@@ -283,6 +288,7 @@ mod tests {
 
     #[test]
     fn carousel_draws_only_visible_window() {
+        fresh_runtime();
         let cx = Scope::root();
         let items = [
             button(cx, "0", || {}), button(cx, "1", || {}), button(cx, "2", || {}),
@@ -300,6 +306,7 @@ mod tests {
 
     #[test]
     fn anim_frame_shifts_rows_and_overpaints_status_last() {
+        fresh_runtime();
         let cx = Scope::root();
         let items = [
             button(cx, "0", || {}), button(cx, "1", || {}), button(cx, "2", || {}),

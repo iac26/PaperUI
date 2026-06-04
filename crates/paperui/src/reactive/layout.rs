@@ -15,7 +15,7 @@ pub(crate) const CAROUSEL_ROW_PITCH: i16 = CAROUSEL_ROW_H + CAROUSEL_SPACING;
 pub(crate) const CAROUSEL_OFFSCREEN_Y: i16 = 1000;
 
 /// Desired size of a node (recurses into children for Column/Row). Read-only.
-fn measure_inner(rt: &Runtime, node: NodeId) -> Size {
+fn measure_inner(rt: &Runtime<'_>, node: NodeId) -> Size {
     match &rt.nodes[node.0 as usize].kind {
         Kind::Text { content, .. } => {
             let chars = content.chars().count() as i16;
@@ -74,7 +74,7 @@ fn measure_inner(rt: &Runtime, node: NodeId) -> Size {
 
 /// Place absolute bounds: this node fills (x,y,w,h); a container lays each child out at the
 /// child's measured size, advancing along the main axis by child extent + spacing.
-fn place_inner(rt: &mut Runtime, node: NodeId, x: i16, y: i16, w: i16, h: i16) {
+fn place_inner(rt: &mut Runtime<'_>, node: NodeId, x: i16, y: i16, w: i16, h: i16) {
     rt.nodes[node.0 as usize].bounds = Rect::new(x, y, w, h);
 
     // Snapshot the (small) child list + spacing so the borrow on this node is released
@@ -130,10 +130,12 @@ pub fn layout(root: NodeId, area: Rect) {
 mod tests {
     use super::*;
     use crate::reactive::node::{button, carousel, col, text_static, Kind};
+    use crate::reactive::runtime::fresh_runtime;
     use crate::reactive::scope::Scope;
 
     #[test]
     fn column_stacks_children_with_spacing() {
+        fresh_runtime();
         let cx = Scope::root();
         let root = col(cx, (text_static(cx, "ab"), text_static(cx, "cd")));
         layout(root, Rect::new(0, 0, 100, 100));
@@ -160,6 +162,7 @@ mod tests {
 
     #[test]
     fn carousel_places_visible_full_width_and_hides_the_rest() {
+        fresh_runtime();
         let (cx, car, items) = make_carousel();
         layout(car, Rect::new(0, 0, 240, 120));
         with_runtime(|rt| {
@@ -178,6 +181,7 @@ mod tests {
 
     #[test]
     fn carousel_row_y_is_constant_regardless_of_offset() {
+        fresh_runtime();
         let (cx, car, items) = make_carousel();
         layout(car, Rect::new(0, 0, 240, 120));
         let row0_y = with_runtime(|rt| rt.nodes[items[0].0 as usize].bounds.y);
@@ -192,6 +196,7 @@ mod tests {
 
     #[test]
     fn column_stretches_children_to_its_width() {
+        fresh_runtime();
         let cx = Scope::root();
         let t = text_static(cx, "hi");
         let root = col(cx, (t, text_static(cx, "yo")));

@@ -7,7 +7,7 @@ use crate::reactive::{ANIM_STEPS, MAX_CHILDREN, TEXT_CAP, VISIBLE};
 use heapless::Vec;
 
 /// Mark a node dirty (idempotent). Used when focus moves so the affected buttons repaint.
-fn mark_dirty(rt: &mut Runtime, node: Option<NodeId>) {
+fn mark_dirty(rt: &mut Runtime<'_>, node: Option<NodeId>) {
     if let Some(n) = node {
         if !rt.dirty.contains(&n) {
             let _ = rt.dirty.push(n);
@@ -99,14 +99,14 @@ pub fn text_static(cx: Scope, s: &'static str) -> NodeId {
     })
 }
 
-pub(crate) fn effect_of_text(rt: &Runtime, node: NodeId) -> Option<EffectId> {
+pub(crate) fn effect_of_text(rt: &Runtime<'_>, node: NodeId) -> Option<EffectId> {
     match &rt.nodes[node.0 as usize].kind {
         Kind::Text { src: TextSource::Reactive(eid), .. } => Some(*eid),
         _ => None,
     }
 }
 
-pub(crate) fn handler_of_button(rt: &Runtime, node: NodeId) -> Option<EffectId> {
+pub(crate) fn handler_of_button(rt: &Runtime<'_>, node: NodeId) -> Option<EffectId> {
     match &rt.nodes[node.0 as usize].kind {
         Kind::Button { on_press, .. } => Some(*on_press),
         _ => None,
@@ -114,7 +114,7 @@ pub(crate) fn handler_of_button(rt: &Runtime, node: NodeId) -> Option<EffectId> 
 }
 
 /// Forward focus to the next Button node (wrapping), operating on an already-locked runtime.
-fn focus_next_inner(rt: &mut Runtime) {
+fn focus_next_inner(rt: &mut Runtime<'_>) {
     let n = rt.nodes.len();
     if n == 0 { return; }
     let old = rt.focus;
@@ -133,7 +133,7 @@ fn focus_next_inner(rt: &mut Runtime) {
 }
 
 /// Backward focus to the previous Button node (wrapping).
-fn focus_prev_inner(rt: &mut Runtime) {
+fn focus_prev_inner(rt: &mut Runtime<'_>) {
     let n = rt.nodes.len();
     if n == 0 { return; }
     let old = rt.focus;
@@ -152,7 +152,7 @@ fn focus_prev_inner(rt: &mut Runtime) {
 }
 
 /// The Carousel node that has `node` among its children, else `None`.
-fn carousel_owning(rt: &Runtime, node: NodeId) -> Option<NodeId> {
+fn carousel_owning(rt: &Runtime<'_>, node: NodeId) -> Option<NodeId> {
     for (i, n) in rt.nodes.iter().enumerate() {
         if let Kind::Carousel { children, .. } = &n.kind {
             if children.contains(&node) {
@@ -166,7 +166,7 @@ fn carousel_owning(rt: &Runtime, node: NodeId) -> Option<NodeId> {
 /// The Carousel node that OWNS the current focus, else `None`. Returning `None` when no carousel
 /// owns the focus lets `nav` fall back to plain focus cycling — and keeps the shared global test
 /// arena honest (leftover carousels never hijack a non-carousel focus).
-fn find_carousel(rt: &Runtime) -> Option<NodeId> {
+fn find_carousel(rt: &Runtime<'_>) -> Option<NodeId> {
     carousel_owning(rt, rt.focus?)
 }
 
@@ -174,7 +174,7 @@ fn find_carousel(rt: &Runtime) -> Option<NodeId> {
 /// signed slot distance (for VISIBLE = 3, top slot = -1, center = 0, bottom = +1), or `None`
 /// if `target` is not in the currently visible window. Used to map a click on a visible row to
 /// the carousel nav delta that re-centers it.
-fn carousel_slot_delta(rt: &Runtime, cnode: NodeId, target: NodeId) -> Option<i32> {
+fn carousel_slot_delta(rt: &Runtime<'_>, cnode: NodeId, target: NodeId) -> Option<i32> {
     if let Kind::Carousel { children, offset, .. } = &rt.nodes[cnode.0 as usize].kind {
         let n = children.len();
         if n == 0 {
@@ -194,7 +194,7 @@ fn carousel_slot_delta(rt: &Runtime, cnode: NodeId, target: NodeId) -> Option<i3
 /// (centered carousel): `offset` is the index shown in the TOP slot = the item just "above" the
 /// selection. Every press moves the view one row, so every nav arms the slide animation. Dirties
 /// the visible slots.
-fn carousel_nav_inner(rt: &mut Runtime, cnode: NodeId, delta: i32) {
+fn carousel_nav_inner(rt: &mut Runtime<'_>, cnode: NodeId, delta: i32) {
     let (children, sel) = match &rt.nodes[cnode.0 as usize].kind {
         Kind::Carousel { children, selected, .. } => (children.clone(), *selected),
         _ => return,
@@ -219,13 +219,13 @@ fn carousel_nav_inner(rt: &mut Runtime, cnode: NodeId, delta: i32) {
 }
 
 /// True if any carousel has an animation in progress (`anim_dir != 0`).
-pub(crate) fn any_carousel_animating(rt: &Runtime) -> bool {
+pub(crate) fn any_carousel_animating(rt: &Runtime<'_>) -> bool {
     rt.nodes.iter().any(|nd| matches!(&nd.kind, Kind::Carousel { anim_dir, .. } if *anim_dir != 0))
 }
 
 /// Advance every animating carousel by one frame. At frame 0 the resting frame has been drawn,
 /// so clear the animation and drop pending dirties (the anim path already painted them).
-pub(crate) fn step_carousel_anim(rt: &mut Runtime) {
+pub(crate) fn step_carousel_anim(rt: &mut Runtime<'_>) {
     let mut finished = false;
     for nd in rt.nodes.iter_mut() {
         if let Kind::Carousel { anim_frame, anim_dir, .. } = &mut nd.kind {
@@ -261,14 +261,14 @@ pub(crate) fn invoke_handler_of_focus() {
     }
 }
 
-pub(crate) fn set_text_content(rt: &mut Runtime, node: NodeId, s: &str) {
+pub(crate) fn set_text_content(rt: &mut Runtime<'_>, node: NodeId, s: &str) {
     if let Kind::Text { content, .. } = &mut rt.nodes[node.0 as usize].kind {
         content.clear();
         let _ = content.push_str(s);
     }
 }
 
-pub(crate) fn set_text_effect(rt: &mut Runtime, node: NodeId, eid: EffectId) {
+pub(crate) fn set_text_effect(rt: &mut Runtime<'_>, node: NodeId, eid: EffectId) {
     if let Kind::Text { src, .. } = &mut rt.nodes[node.0 as usize].kind {
         *src = TextSource::Reactive(eid);
     }
@@ -378,6 +378,7 @@ pub fn carousel_select_first(c: NodeId) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::reactive::runtime::fresh_runtime;
 
     #[test]
     fn empty_node_is_const_array_initializable() {
@@ -387,6 +388,7 @@ mod tests {
 
     #[test]
     fn col_of_two_texts_allocates_three_nodes() {
+        fresh_runtime();
         let cx = Scope::root();
         let n0 = with_runtime(|rt| rt.nodes.len());
         let _root = col(cx, (text_static(cx, "a"), text_static(cx, "b")));
@@ -397,6 +399,7 @@ mod tests {
 
     #[test]
     fn reactive_text_runs_closure_and_tracks_signal() {
+        fresh_runtime();
         let cx = Scope::root();
         let count = cx.signal(0i32);
         // a reactive text that reads `count`
@@ -415,6 +418,7 @@ mod tests {
 
     #[test]
     fn button_handler_mutates_signal_on_invoke() {
+        fresh_runtime();
         let cx = Scope::root();
         let count = cx.signal(0i32);
         let b = button(cx, "inc", move || count.update(|c| *c += 1));
@@ -425,6 +429,7 @@ mod tests {
 
     #[test]
     fn pointer_inside_button_runs_its_handler_and_focuses_it() {
+        fresh_runtime();
         let cx = Scope::root();
         let count = cx.signal(0i32);
         let b = button(cx, "+", move || count.update(|c| *c += 1));
@@ -443,6 +448,7 @@ mod tests {
 
     #[test]
     fn pointer_outside_any_button_does_not_run_our_handler() {
+        fresh_runtime();
         let cx = Scope::root();
         let count = cx.signal(0i32);
         let b = button(cx, "+", move || count.update(|c| *c += 1));
@@ -454,6 +460,7 @@ mod tests {
 
     #[test]
     fn overlapping_buttons_last_one_wins() {
+        fresh_runtime();
         let cx = Scope::root();
         let a_count = cx.signal(0i32);
         let b_count = cx.signal(0i32);
@@ -473,6 +480,7 @@ mod tests {
 
     #[test]
     fn focus_next_dirties_old_and_new_focused_buttons() {
+        fresh_runtime();
         let cx = Scope::root();
         let b0 = button(cx, "a", || {});
         let b1 = button(cx, "b", || {});
@@ -492,6 +500,7 @@ mod tests {
 
     #[test]
     fn carousel_holds_children_and_starts_at_zero() {
+        fresh_runtime();
         let cx = Scope::root();
         let items = [
             button(cx, "a", || {}), button(cx, "b", || {}), button(cx, "c", || {}),
@@ -510,6 +519,7 @@ mod tests {
 
     #[test]
     fn carousel_select_first_centers_first_and_focuses_it() {
+        fresh_runtime();
         let cx = Scope::root();
         let a = button(cx, "a", || {});
         let car = carousel(cx, &[a, button(cx, "b", || {}), button(cx, "c", || {})]);
@@ -526,6 +536,7 @@ mod tests {
 
     #[test]
     fn every_nav_centers_selection_and_arms_animation() {
+        fresh_runtime();
         let cx = Scope::root();
         let items = [
             button(cx, "0", || {}), button(cx, "1", || {}), button(cx, "2", || {}),
@@ -549,6 +560,7 @@ mod tests {
 
     #[test]
     fn click_on_a_visible_row_centers_and_activates_it() {
+        fresh_runtime();
         use crate::reactive::layout::layout;
         let cx = Scope::root();
         let hits = cx.signal(0i32);
@@ -583,6 +595,7 @@ mod tests {
 
     #[test]
     fn nav_wraps_at_both_ends() {
+        fresh_runtime();
         let cx = Scope::root();
         let items = [button(cx, "0", || {}), button(cx, "1", || {}), button(cx, "2", || {})];
         let car = carousel(cx, &items);
@@ -603,6 +616,7 @@ mod tests {
 
     #[test]
     fn step_counts_down_then_clears() {
+        fresh_runtime();
         let cx = Scope::root();
         let items = [
             button(cx, "0", || {}), button(cx, "1", || {}), button(cx, "2", || {}),

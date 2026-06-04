@@ -30,7 +30,7 @@ pub use runtime::{EffectId, NodeId, OwnerId, SignalId};
 pub(crate) use runtime::with_runtime;
 
 mod storage;
-pub use storage::Storage;
+pub use storage::{install, Storage};
 
 mod signal;
 pub use signal::{ReactiveValue, Signal};

@@ -17,7 +17,7 @@ pub struct Signal<T> {
 }
 
 impl<T: ReactiveValue> Signal<T> {
-    pub(crate) fn alloc_in(rt: &mut Runtime, owner: OwnerId, init: T) -> Self {
+    pub(crate) fn alloc_in(rt: &mut Runtime<'_>, owner: OwnerId, init: T) -> Self {
         // Compile-time guards: payload must fit the slot in BOTH size and alignment.
         // (Mirrors BoundedFn. `value` is `[MaybeUninit<usize>; SIGNAL_SLOT_WORDS]`.)
         const {
@@ -92,7 +92,7 @@ mod value_cell {
     #![allow(unsafe_code)]
     use crate::reactive::runtime::{Runtime, SignalId};
 
-    pub(super) fn write_value<T: Copy + 'static>(rt: &mut Runtime, id: SignalId, v: T) {
+    pub(super) fn write_value<T: Copy + 'static>(rt: &mut Runtime<'_>, id: SignalId, v: T) {
         // Enforce the type-match invariant the # Safety rationale relies on: the slot must
         // already be tagged with T's TypeId (set by `alloc_signal`). Catches a stale handle
         // or a wrong-T access in debug builds before it can reinterpret bytes.
@@ -110,7 +110,7 @@ mod value_cell {
         }
     }
 
-    pub(super) fn read_value<T: Copy + 'static>(rt: &Runtime, id: SignalId) -> T {
+    pub(super) fn read_value<T: Copy + 'static>(rt: &Runtime<'_>, id: SignalId) -> T {
         // Same type-match invariant as write_value: only read a slot tagged with T's TypeId.
         debug_assert_eq!(
             rt.signals[id.0 as usize].type_id,
@@ -130,6 +130,7 @@ mod value_cell {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::reactive::runtime::fresh_runtime;
 
     fn alloc<T: ReactiveValue>(init: T) -> Signal<T> {
         with_runtime(|rt| Signal::<T>::alloc_in(rt, OwnerId(0), init))
@@ -137,12 +138,14 @@ mod tests {
 
     #[test]
     fn get_returns_initial_value() {
+        fresh_runtime();
         let s = alloc(7i32);
         assert_eq!(s.get(), 7);
     }
 
     #[test]
     fn set_changes_value_and_bumps_epoch_only_on_change() {
+        fresh_runtime();
         let s = alloc(1i32);
         let e0 = with_runtime(|rt| rt.epoch);
         s.set(1); // no-op

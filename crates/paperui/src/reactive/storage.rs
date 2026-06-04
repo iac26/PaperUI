@@ -26,7 +26,7 @@ impl<const NS: usize, const NN: usize, const NE: usize, const NO: usize> Default
 
 impl<const NS: usize, const NN: usize, const NE: usize, const NO: usize> Storage<NS, NN, NE, NO> {
     /// Const-construct empty backing arrays. Place this in a `static` and pass a
-    /// `&'static mut` borrow to `install()` (added in a later task) before building any UI nodes.
+    /// `&'static mut` borrow to `install()` before building any UI nodes.
     pub const fn new() -> Self {
         Self {
             signals: [EMPTY_SIGNAL; NS],
@@ -36,4 +36,25 @@ impl<const NS: usize, const NN: usize, const NE: usize, const NO: usize> Storage
             dirty: [NodeId(0); NN],
         }
     }
+}
+
+use crate::reactive::runtime::{install_view, Runtime};
+use crate::reactive::Arena;
+
+/// Hand the engine a borrow of app-owned storage. Call exactly once, before any `Scope::root`,
+/// `use_state`, or view builder. A missing call makes the first reactive op panic (not UB).
+pub fn install<const NS: usize, const NN: usize, const NE: usize, const NO: usize>(
+    storage: &'static mut Storage<NS, NN, NE, NO>,
+) {
+    let view = Runtime {
+        signals: &mut storage.signals,
+        effects: &mut storage.effects,
+        owners_used: &mut storage.owners_used,
+        nodes: Arena::new(&mut storage.nodes),
+        dirty: Arena::new(&mut storage.dirty),
+        current_effect: None,
+        focus: None,
+        epoch: 0,
+    };
+    install_view(view);
 }

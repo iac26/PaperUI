@@ -42,9 +42,11 @@ pub fn use_state<T: ReactiveValue>(cx: Scope, init: impl FnOnce() -> T) -> Signa
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::reactive::runtime::fresh_runtime;
 
     #[test]
     fn signals_created_under_a_scope_are_freed_on_dispose() {
+        fresh_runtime();
         let used_before = with_runtime(|rt| rt.signals.iter().filter(|s| s.in_use).count());
         let cx = Scope::root();
         let s = cx.signal(5i32);
@@ -58,6 +60,7 @@ mod tests {
 
     #[test]
     fn use_state_is_sugar_over_signal() {
+        fresh_runtime();
         let cx = Scope::root();
         let count = use_state(cx, || 0u32);
         count.set(3);

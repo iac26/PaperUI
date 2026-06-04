@@ -66,7 +66,7 @@ pub(crate) fn pump_until_empty(src: &mut impl EventSource) {
 mod tests {
     use super::*;
     use crate::reactive::node::{button, carousel, carousel_select_first, col, text, text_static};
-    use crate::reactive::runtime::with_runtime;
+    use crate::reactive::runtime::{fresh_runtime, with_runtime};
     use crate::reactive::scope::Scope;
     use crate::geometry::{Point, Rect};
 
@@ -79,6 +79,7 @@ mod tests {
 
     #[test]
     fn focus_next_then_activate_runs_the_focused_handler() {
+        fresh_runtime();
         let cx = Scope::root();
         let count = cx.signal(0i32);
         let tx = text_static(cx, "x");
@@ -99,6 +100,7 @@ mod tests {
 
     #[test]
     fn dispatch_pointer_activates_the_button_under_the_point() {
+        fresh_runtime();
         let cx = Scope::root();
         let count = cx.signal(0i32);
         let b = button(cx, "+", move || count.update(|c| *c += 1));
@@ -110,6 +112,7 @@ mod tests {
 
     #[test]
     fn signal_change_dirties_its_subscriber() {
+        fresh_runtime();
         let cx = Scope::root();
         let count = cx.signal(0i32);
         let _t = text(cx, move || {
@@ -144,6 +147,7 @@ mod tests {
 
     #[test]
     fn down_centers_selection_and_wraps() {
+        fresh_runtime();
         let (cx, car, items) = six_carousel();
         let mut s = Scripted(heapless::Deque::new());
         for _ in 0..3 { let _ = s.0.push_back(UiEvent::FocusNext); }
@@ -160,6 +164,7 @@ mod tests {
 
     #[test]
     fn up_navigates_backward_and_wraps() {
+        fresh_runtime();
         let (cx, car, items) = six_carousel();
         let mut s = Scripted(heapless::Deque::new());
         let _ = s.0.push_back(UiEvent::FocusPrev); // up from first wraps to last
