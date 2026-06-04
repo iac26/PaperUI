@@ -13,16 +13,24 @@ pub struct Gray4Canvas {
     pub buf: [u8; FB_PIXELS],
     pub w: i16,
     pub h: i16,
+    /// Active scissor rectangle; `None` means the whole framebuffer is drawable.
+    clip: Option<Rect>,
 }
 
 impl Gray4Canvas {
     pub fn new() -> Self {
-        Self { buf: [0x0F; FB_PIXELS], w: FB_W as i16, h: FB_H as i16 }
+        Self { buf: [0x0F; FB_PIXELS], w: FB_W as i16, h: FB_H as i16, clip: None }
     }
 
     fn put(&mut self, x: i16, y: i16, gray: u8) {
+        // Bounds-check the framebuffer dimensions first, then honour the scissor.
         if x < 0 || y < 0 || x >= self.w || y >= self.h {
             return;
+        }
+        if let Some(c) = self.clip {
+            if !c.contains(Point::new(x, y)) {
+                return;
+            }
         }
         self.buf[y as usize * FB_W + x as usize] = gray & 0x0F;
     }
@@ -85,5 +93,9 @@ impl Canvas for Gray4Canvas {
             cx += FONT0_W;
         }
         Size::new(s.chars().count() as i16 * FONT0_W, FONT0_H)
+    }
+
+    fn set_clip(&mut self, clip: Option<Rect>) {
+        self.clip = clip;
     }
 }

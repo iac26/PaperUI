@@ -223,6 +223,7 @@ mod tests {
             DrawOp::FillRect(a, _) => rect_in(*a, r),
             DrawOp::StrokeRect(a, _, _) => rect_in(*a, r),
             DrawOp::Text(p, _) => r.contains(*p),
+            DrawOp::Clip(_) => true, // a clip op draws nothing; never a containment violation
         }
     }
 

@@ -2,6 +2,7 @@
 //! `DrawTarget<Color = Rgb565>`. Behind the `eg` feature so the engine never
 //! depends on a graphics library unless this adapter is requested.
 
+use embedded_graphics::draw_target::DrawTargetExt;
 use embedded_graphics::mono_font::{ascii::FONT_6X9, MonoTextStyle};
 use embedded_graphics::pixelcolor::raw::RawU16;
 use embedded_graphics::pixelcolor::Rgb565;
@@ -24,10 +25,14 @@ fn rect_to_eg(r: Rect) -> Rectangle {
 }
 
 /// `Canvas` implemented over a mutable borrow of any Rgb565 `DrawTarget`.
-pub struct EgCanvas<'a, D> { target: &'a mut D }
+pub struct EgCanvas<'a, D> {
+    target: &'a mut D,
+    /// Active scissor rectangle; `None` means draw to the whole surface.
+    clip: Option<Rect>,
+}
 
 impl<'a, D> EgCanvas<'a, D> {
-    pub fn new(target: &'a mut D) -> Self { Self { target } }
+    pub fn new(target: &'a mut D) -> Self { Self { target, clip: None } }
 }
 
 impl<'a, D> Canvas for EgCanvas<'a, D>
@@ -36,7 +41,11 @@ where
 {
     fn fill_rect(&mut self, r: Rect, color: Color) {
         let style = PrimitiveStyle::with_fill(to_rgb565(color));
-        let _ = rect_to_eg(r).into_styled(style).draw(self.target);
+        if let Some(c) = self.clip {
+            let _ = rect_to_eg(r).into_styled(style).draw(&mut self.target.clipped(&rect_to_eg(c)));
+        } else {
+            let _ = rect_to_eg(r).into_styled(style).draw(self.target);
+        }
     }
 
     fn stroke_rect(&mut self, r: Rect, color: Color, width: u16) {
@@ -48,19 +57,28 @@ where
             .stroke_width(width as u32)
             .stroke_alignment(StrokeAlignment::Inside)
             .build();
-        let _ = rect_to_eg(r).into_styled(style).draw(self.target);
+        if let Some(c) = self.clip {
+            let _ = rect_to_eg(r).into_styled(style).draw(&mut self.target.clipped(&rect_to_eg(c)));
+        } else {
+            let _ = rect_to_eg(r).into_styled(style).draw(self.target);
+        }
     }
 
     fn text(&mut self, at: PPoint, s: &str, _font: FontId, color: Color) -> PSize {
         let style = MonoTextStyle::new(&FONT_6X9, to_rgb565(color));
-        let _ = Text::with_baseline(
-            s,
-            embedded_graphics::geometry::Point::new(at.x as i32, at.y as i32),
-            style,
-            Baseline::Top,
-        )
-        .draw(self.target);
+        let eg_point = embedded_graphics::geometry::Point::new(at.x as i32, at.y as i32);
+        if let Some(c) = self.clip {
+            let _ = Text::with_baseline(s, eg_point, style, Baseline::Top)
+                .draw(&mut self.target.clipped(&rect_to_eg(c)));
+        } else {
+            let _ = Text::with_baseline(s, eg_point, style, Baseline::Top)
+                .draw(self.target);
+        }
         PSize::new(s.chars().count() as i16 * 6, 8)
+    }
+
+    fn set_clip(&mut self, clip: Option<Rect>) {
+        self.clip = clip;
     }
 }
 
@@ -105,5 +123,31 @@ mod tests {
         let mut c = EgCanvas::new(&mut display);
         let sz = c.text(Point::new(0, 0), "Hi", FontId(0), Color::WHITE);
         assert_eq!(sz, crate::Size::new(2 * 6, 8));
+    }
+
+    #[test]
+    fn set_clip_confines_fill_rect_to_clip_region() {
+        // Draw a rect that spans (0,0,10,10) but clip to (0,0,5,5).
+        // Pixels outside the clip should not be affected.
+        let mut display: MockDisplay<Rgb565> = MockDisplay::new();
+        display.set_allow_overdraw(true);
+        let mut c = EgCanvas::new(&mut display);
+        c.set_clip(Some(Rect::new(0, 0, 5, 5)));
+        c.fill_rect(Rect::new(0, 0, 10, 10), Color::WHITE);
+        // Affected area must be confined to the 5x5 clip
+        let area = display.affected_area();
+        assert!(area.size.width <= 5, "width {} should be <=5", area.size.width);
+        assert!(area.size.height <= 5, "height {} should be <=5", area.size.height);
+    }
+
+    #[test]
+    fn set_clip_none_restores_full_draw() {
+        let mut display: MockDisplay<Rgb565> = MockDisplay::new();
+        display.set_allow_overdraw(true);
+        let mut c = EgCanvas::new(&mut display);
+        c.set_clip(Some(Rect::new(0, 0, 3, 3)));
+        c.set_clip(None);
+        c.fill_rect(Rect::new(0, 0, 8, 8), Color::WHITE);
+        assert_eq!(display.affected_area().size, embedded_graphics::geometry::Size::new(8, 8));
     }
 }
