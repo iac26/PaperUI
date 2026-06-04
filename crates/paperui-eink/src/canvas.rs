@@ -35,9 +35,15 @@ impl Default for Gray4Canvas {
 }
 
 fn gray4(c: Color) -> u8 {
-    let r = (c.0 >> 16) & 0xFF;
-    let g = (c.0 >> 8) & 0xFF;
-    let b = c.0 & 0xFF;
+    // Color is now packed RGB565. Unpack each channel and expand back to ~8-bit
+    // (replicate the high bits into the low gap) so the luma weights stay calibrated
+    // for 0..=255 inputs. Precision is 5/6-bit-limited, but the output is 4-bit gray.
+    let r5 = (c.0 >> 11) & 0x1F;
+    let g6 = (c.0 >> 5) & 0x3F;
+    let b5 = c.0 & 0x1F;
+    let r = ((r5 << 3) | (r5 >> 2)) as u32;
+    let g = ((g6 << 2) | (g6 >> 4)) as u32;
+    let b = ((b5 << 3) | (b5 >> 2)) as u32;
     let luma = (r * 54 + g * 183 + b * 19) >> 8;
     (luma >> 4) as u8
 }
