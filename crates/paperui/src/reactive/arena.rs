@@ -42,9 +42,6 @@ impl<'a, T> Arena<'a, T> {
     pub(crate) fn iter(&self) -> core::slice::Iter<'_, T> {
         self.as_slice().iter()
     }
-    pub(crate) fn iter_mut(&mut self) -> core::slice::IterMut<'_, T> {
-        self.as_mut_slice().iter_mut()
-    }
 }
 
 impl<'a, T: PartialEq> Arena<'a, T> {

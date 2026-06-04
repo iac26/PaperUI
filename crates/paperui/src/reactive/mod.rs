@@ -45,7 +45,7 @@ pub use scope::{use_state, Scope};
 
 mod node;
 pub use node::{button, carousel, carousel_select_first, col, row, text, text_static, IntoChildren, Kind, Node, TextSource};
-pub use node::{ANIM_STEPS, VISIBLE};
+pub use node::VISIBLE;
 
 mod layout;
 pub use layout::layout;

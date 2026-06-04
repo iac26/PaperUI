@@ -166,8 +166,7 @@ impl<T: Animatable> Animated<T> {
     }
 
     /// Route this animator's progress to a non-effect node (e.g. the carousel), dirtied directly
-    /// each tick while active. Consumed when the carousel becomes a windowed viewport (later task).
-    #[allow(dead_code)]
+    /// each tick while active — so a node that reads the value outside an effect still repaints.
     pub(crate) fn set_dirty_node(self, n: NodeId) {
         with_runtime(|rt| rt.animators[self.anim.0 as usize].dirty_node = Some(n));
     }
