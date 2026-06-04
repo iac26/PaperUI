@@ -1,6 +1,7 @@
 //! The single global owner of all reactive storage. Accessed via `with_runtime`, which
 //! takes ONE non-reentrant critical section. Never call `with_runtime` from inside another.
 
+use crate::reactive::anim::{AnimKind, AnimValue};
 use crate::reactive::bounded_fn::BoundedFn;
 use crate::reactive::node::{effect_of_text, handler_of_button, Node};
 use crate::reactive::{Arena, CLOSURE_WORDS, FANOUT, SIGNAL_SLOT_WORDS};
@@ -17,6 +18,8 @@ pub struct SignalId(pub u16);
 pub struct EffectId(pub u16);
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct NodeId(pub u16);
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct AnimId(pub u16);
 
 pub(crate) struct SignalSlot {
     pub value: [MaybeUninit<usize>; SIGNAL_SLOT_WORDS],
@@ -34,15 +37,46 @@ pub(crate) struct EffectSlot {
 
 pub(crate) const EMPTY_EFFECT: EffectSlot = EffectSlot { func: None, owner: OwnerId(0), in_use: false };
 
+/// One running (or idle) animation. The driver interpolates `from`→`to` over `dur_ms` and writes
+/// the result into `signal`, dirtying its subscribers (and `dirty_node`, for non-effect readers).
+#[derive(Copy, Clone)]
+pub(crate) struct AnimSlot {
+    pub signal: SignalId,
+    pub dirty_node: Option<NodeId>,
+    pub from: AnimValue,
+    pub to: AnimValue,
+    pub start_ms: u32,
+    pub dur_ms: u16,
+    pub kind: AnimKind,
+    pub owner: OwnerId,
+    pub in_use: bool,
+    pub active: bool,
+}
+
+pub(crate) const EMPTY_ANIM: AnimSlot = AnimSlot {
+    signal: SignalId(0),
+    dirty_node: None,
+    from: AnimValue::I16(0),
+    to: AnimValue::I16(0),
+    start_ms: 0,
+    dur_ms: 0,
+    kind: AnimKind::Transition,
+    owner: OwnerId(0),
+    in_use: false,
+    active: false,
+};
+
 pub(crate) struct Runtime<'a> {
     pub signals: &'a mut [SignalSlot],
     pub effects: &'a mut [EffectSlot],
+    pub animators: &'a mut [AnimSlot],
     pub owners_used: &'a mut [bool],
     pub nodes: Arena<'a, Node>,
     pub dirty: Arena<'a, NodeId>,
     pub current_effect: Option<NodeId>,
     pub focus: Option<NodeId>,
     pub epoch: u32,
+    pub now_ms: u32,
 }
 
 pub(crate) const EMPTY_SIGNAL: SignalSlot = SignalSlot {
@@ -105,6 +139,12 @@ impl Runtime<'_> {
                 e.func = None;
             }
         }
+        for a in self.animators.iter_mut() {
+            if a.in_use && a.owner == o {
+                a.in_use = false;
+                a.active = false;
+            }
+        }
         self.owners_used[o.0 as usize] = false;
         // NOTE: nodes are intentionally NOT removed. NodeId is an index into the `nodes`
         // Vec; removing a node would shift later indices and corrupt every other NodeId.
@@ -133,6 +173,11 @@ impl Runtime<'_> {
             e.func = None;
             e.owner = OwnerId(0);
         }
+        for a in self.animators.iter_mut() {
+            a.in_use = false;
+            a.active = false;
+            a.owner = OwnerId(0);
+        }
         for u in self.owners_used.iter_mut() {
             *u = false;
         }
@@ -141,6 +186,7 @@ impl Runtime<'_> {
         self.current_effect = None;
         self.focus = None;
         self.epoch = 0;
+        self.now_ms = 0;
     }
 }
 
@@ -168,6 +214,30 @@ impl Runtime<'_> {
         }
         debug_assert!(false, "signal arena exhausted (raise the app's Storage)");
         SignalId((self.signals.len() - 1) as u16)
+    }
+
+    pub(crate) fn alloc_anim(
+        &mut self,
+        owner: OwnerId,
+        signal: SignalId,
+        kind: AnimKind,
+        dur_ms: u16,
+    ) -> AnimId {
+        for (i, a) in self.animators.iter_mut().enumerate() {
+            if !a.in_use {
+                a.in_use = true;
+                a.active = false;
+                a.owner = owner;
+                a.signal = signal;
+                a.kind = kind;
+                a.dur_ms = dur_ms;
+                a.dirty_node = None;
+                a.start_ms = 0;
+                return AnimId(i as u16);
+            }
+        }
+        debug_assert!(false, "animator arena exhausted (raise the app's Storage)");
+        AnimId((self.animators.len() - 1) as u16)
     }
 }
 
@@ -229,7 +299,7 @@ pub(crate) fn invoke_handler_of(node: NodeId) {
 pub(crate) fn fresh_runtime() {
     use crate::reactive::storage::{install, Storage};
     use static_cell::StaticCell;
-    static CELL: StaticCell<Storage<16, 64, 32, 16>> = StaticCell::new();
+    static CELL: StaticCell<Storage<16, 64, 32, 16, 8>> = StaticCell::new();
     if let Some(storage) = CELL.try_init(Storage::new()) {
         install(storage);
     }

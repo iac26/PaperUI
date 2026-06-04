@@ -15,27 +15,30 @@ mod arena;
 pub(crate) use arena::Arena;
 
 mod runtime;
-pub use runtime::{EffectId, NodeId, OwnerId, SignalId};
+pub use runtime::{AnimId, EffectId, NodeId, OwnerId, SignalId};
 #[allow(unused_imports)]
 pub(crate) use runtime::with_runtime;
 
 mod storage;
 pub use storage::{install, Storage};
 
-/// Name the four pool sizes in one place; expands to a `Storage<…>` TYPE so it reads well in a
+/// Name the five pool sizes in one place; expands to a `Storage<…>` TYPE so it reads well in a
 /// `StaticCell<storage!(…)>` declaration.
-/// All four keyword labels are required. Example:
-/// `static S: StaticCell<storage!(signals: 1, nodes: 4, effects: 2, owners: 1)> = StaticCell::new();`
+/// All five keyword labels are required. Example:
+/// `static S: StaticCell<storage!(signals: 1, nodes: 4, effects: 2, owners: 1, anims: 1)> = StaticCell::new();`
 #[macro_export]
 macro_rules! storage {
-    (signals: $s:expr, nodes: $n:expr, effects: $e:expr, owners: $o:expr $(,)?) => {
-        $crate::reactive::Storage<{ $s }, { $n }, { $e }, { $o }>
+    (signals: $s:expr, nodes: $n:expr, effects: $e:expr, owners: $o:expr, anims: $a:expr $(,)?) => {
+        $crate::reactive::Storage<{ $s }, { $n }, { $e }, { $o }, { $a }>
     };
 }
 pub use crate::storage;
 
 mod signal;
 pub use signal::{ReactiveValue, Signal};
+
+mod anim;
+pub use anim::{Anim, Animated, Easing};
 
 mod scope;
 pub use scope::{use_state, Scope};
@@ -59,9 +62,9 @@ mod macro_tests {
     #[test]
     fn storage_macro_expands_to_a_constructible_type() {
         fresh_runtime();
-        let _s: crate::storage!(signals: 1, nodes: 2, effects: 1, owners: 1) =
+        let _s: crate::storage!(signals: 1, nodes: 2, effects: 1, owners: 1, anims: 1) =
             crate::reactive::Storage::new();
-        let _s2: crate::reactive::storage!(signals: 1, nodes: 1, effects: 1, owners: 1) =
+        let _s2: crate::reactive::storage!(signals: 1, nodes: 1, effects: 1, owners: 1, anims: 1) =
             crate::reactive::Storage::new();
     }
 }
