@@ -46,9 +46,7 @@ fn gray4(c: Color) -> u8 {
     // Color is now packed RGB565. Unpack each channel and expand back to ~8-bit
     // (replicate the high bits into the low gap) so the luma weights stay calibrated
     // for 0..=255 inputs. Precision is 5/6-bit-limited, but the output is 4-bit gray.
-    let r5 = (c.0 >> 11) & 0x1F;
-    let g6 = (c.0 >> 5) & 0x3F;
-    let b5 = c.0 & 0x1F;
+    let (r5, g6, b5) = c.channels();
     let r = ((r5 << 3) | (r5 >> 2)) as u32;
     let g = ((g6 << 2) | (g6 >> 4)) as u32;
     let b = ((b5 << 3) | (b5 >> 2)) as u32;

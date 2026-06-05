@@ -115,6 +115,9 @@ fn render_frame<C: Canvas, T: WidgetTheme<C>>(root: NodeId, canvas: &mut C, them
     // is ever relaxed, the trailing `clear()` would silently drop nodes dirtied mid-frame; then
     // this must instead drain only [0..count) (retain the tail) or loop until the set stabilizes.
     let count = with_runtime(|rt| rt.dirty.len());
+    if count == 0 {
+        return; // nothing dirty: skip the relayout + draw passes entirely
+    }
     for i in 0..count {
         let n = with_runtime(|rt| rt.dirty.as_slice()[i]);
         run_effect_of(n);
@@ -139,9 +142,8 @@ pub fn render_frame_full<C: Canvas, T: WidgetTheme<C>>(root: NodeId, canvas: &mu
 /// driver's `advance_anims` dirties the carousel via its `dirty_node` each tick, so the normal
 /// surgical repaint here redraws the carousel's clipped window — no separate animation path.
 pub fn render_tick<C: Canvas, T: WidgetTheme<C>>(root: NodeId, canvas: &mut C, theme: &T) {
-    if with_runtime(|rt| !rt.dirty.is_empty()) {
-        render_frame(root, canvas, theme);
-    }
+    // `render_frame` early-returns when nothing is dirty, so the idle path stays a single lock.
+    render_frame(root, canvas, theme);
 }
 
 #[cfg(all(test, feature = "mock"))]

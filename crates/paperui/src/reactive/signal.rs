@@ -53,20 +53,8 @@ impl<T: ReactiveValue> Signal<T> {
     }
 
     pub fn set(self, v: T) {
-        with_runtime(|rt| {
-            let old = value_cell::read_value::<T>(rt, self.id);
-            if old != v {
-                value_cell::write_value(rt, self.id, v);
-                rt.epoch = rt.epoch.wrapping_add(1);
-                // dirty all subscribers
-                for i in 0..rt.signals[self.id.0 as usize].subs.len() {
-                    let n = rt.signals[self.id.0 as usize].subs[i];
-                    if !rt.dirty.contains(&n) {
-                        let _ = rt.dirty.push(n);
-                    }
-                }
-            }
-        });
+        // Same write protocol as the animator tick path; share the one implementation.
+        with_runtime(|rt| set_typed::<T>(rt, self.id, v));
     }
 
     pub fn update(self, f: impl FnOnce(&mut T)) {

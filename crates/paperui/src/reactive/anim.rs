@@ -96,17 +96,12 @@ impl AnimValue {
                 AnimValue::I16(lerp_i16(a, b, num, den))
             }
             (AnimValue::Color(a), AnimValue::Color(b)) => {
-                // RRRRR_GGGGGG_BBBBB
-                let ar = (a.0 >> 11) & 0x1F;
-                let ag = (a.0 >> 5) & 0x3F;
-                let ab = a.0 & 0x1F;
-                let br = (b.0 >> 11) & 0x1F;
-                let bg = (b.0 >> 5) & 0x3F;
-                let bb = b.0 & 0x1F;
+                let (ar, ag, ab) = a.channels();
+                let (br, bg, bb) = b.channels();
                 let r = lerp_i16(ar as i16, br as i16, num, den) as u16;
                 let g = lerp_i16(ag as i16, bg as i16, num, den) as u16;
                 let bch = lerp_i16(ab as i16, bb as i16, num, den) as u16;
-                AnimValue::Color(Color((r << 11) | (g << 5) | bch))
+                AnimValue::Color(Color::from_channels(r, g, bch))
             }
             // Mixed/Frame: not tweened — snap to the target.
             _ => to,
@@ -174,22 +169,27 @@ impl<T: Animatable> Animated<T> {
 
 /// Advance every active animator to `now`: interpolate, write the signal (dirtying subscribers),
 /// dirty any `dirty_node`, and deactivate + snap to `to` once the duration elapses.
-pub fn advance_anims(rt: &mut Runtime, now: u32) {
+pub(crate) fn advance_anims(rt: &mut Runtime, now: u32) {
     rt.now_ms = now;
     for i in 0..rt.animators.len() {
         if !rt.animators[i].active {
             continue;
         }
         let a = rt.animators[i];
+        // Only Transition is advanced today; FrameLoop is specced but unbuilt (spec §10).
+        debug_assert!(matches!(a.kind, AnimKind::Transition), "FrameLoop not yet advanced");
         let e = now.wrapping_sub(a.start_ms).min(a.dur_ms as u32);
-        set_signal_av(rt, a.signal, AnimValue::lerp(a.from, a.to, e, a.dur_ms as u32));
+        let done = e >= a.dur_ms as u32;
+        // At the final tick the interpolation already equals `to`; write it directly and stop —
+        // no second redundant write (and its extra subscriber fan-out).
+        let v = if done { a.to } else { AnimValue::lerp(a.from, a.to, e, a.dur_ms as u32) };
+        set_signal_av(rt, a.signal, v);
         if let Some(n) = a.dirty_node {
             if !rt.dirty.contains(&n) {
                 let _ = rt.dirty.push(n);
             }
         }
-        if e >= a.dur_ms as u32 {
-            set_signal_av(rt, a.signal, a.to);
+        if done {
             rt.animators[i].active = false;
         }
     }

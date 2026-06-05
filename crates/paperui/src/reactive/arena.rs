@@ -17,6 +17,7 @@ impl<'a, T> Arena<'a, T> {
     pub(crate) fn len(&self) -> usize {
         self.len
     }
+    #[cfg(test)] // only the test suite checks emptiness now; render uses len()/early-return
     pub(crate) fn is_empty(&self) -> bool {
         self.len == 0
     }

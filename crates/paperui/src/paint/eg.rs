@@ -35,17 +35,27 @@ impl<'a, D> EgCanvas<'a, D> {
     pub fn new(target: &'a mut D) -> Self { Self { target, clip: None } }
 }
 
+impl<'a, D> EgCanvas<'a, D>
+where
+    D: DrawTarget<Color = Rgb565>,
+{
+    /// Draw `d`, confined to the active clip rect if `set_clip` set one. Single home for the
+    /// clip branch, so each `Canvas` method (and any future one) stays a one-liner.
+    fn draw_clipped<Dr: Drawable<Color = Rgb565>>(&mut self, d: Dr) {
+        match self.clip {
+            Some(c) => { let _ = d.draw(&mut self.target.clipped(&rect_to_eg(c))); }
+            None => { let _ = d.draw(self.target); }
+        }
+    }
+}
+
 impl<'a, D> Canvas for EgCanvas<'a, D>
 where
     D: DrawTarget<Color = Rgb565>,
 {
     fn fill_rect(&mut self, r: Rect, color: Color) {
         let style = PrimitiveStyle::with_fill(to_rgb565(color));
-        if let Some(c) = self.clip {
-            let _ = rect_to_eg(r).into_styled(style).draw(&mut self.target.clipped(&rect_to_eg(c)));
-        } else {
-            let _ = rect_to_eg(r).into_styled(style).draw(self.target);
-        }
+        self.draw_clipped(rect_to_eg(r).into_styled(style));
     }
 
     fn stroke_rect(&mut self, r: Rect, color: Color, width: u16) {
@@ -57,23 +67,13 @@ where
             .stroke_width(width as u32)
             .stroke_alignment(StrokeAlignment::Inside)
             .build();
-        if let Some(c) = self.clip {
-            let _ = rect_to_eg(r).into_styled(style).draw(&mut self.target.clipped(&rect_to_eg(c)));
-        } else {
-            let _ = rect_to_eg(r).into_styled(style).draw(self.target);
-        }
+        self.draw_clipped(rect_to_eg(r).into_styled(style));
     }
 
     fn text(&mut self, at: PPoint, s: &str, _font: FontId, color: Color) -> PSize {
         let style = MonoTextStyle::new(&FONT_6X9, to_rgb565(color));
         let eg_point = embedded_graphics::geometry::Point::new(at.x as i32, at.y as i32);
-        if let Some(c) = self.clip {
-            let _ = Text::with_baseline(s, eg_point, style, Baseline::Top)
-                .draw(&mut self.target.clipped(&rect_to_eg(c)));
-        } else {
-            let _ = Text::with_baseline(s, eg_point, style, Baseline::Top)
-                .draw(self.target);
-        }
+        self.draw_clipped(Text::with_baseline(s, eg_point, style, Baseline::Top));
         PSize::new(s.chars().count() as i16 * 6, 8)
     }
 

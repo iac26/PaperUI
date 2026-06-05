@@ -47,15 +47,8 @@ pub(crate) fn ops_after_clip_within(ops: &[DrawOp], clip: Rect) -> bool {
         match op {
             DrawOp::Clip(Some(c)) if *c == clip => { clipped = true; }
             DrawOp::Clip(_) => { clipped = false; }
-            DrawOp::FillRect(r, _) if clipped => {
-                // top-left and bottom-right corners must both be inside clip
-                if !clip.contains(Point::new(r.x, r.y))
-                    || !clip.contains(Point::new(r.x + r.w - 1, r.y + r.h - 1))
-                {
-                    return false;
-                }
-            }
-            DrawOp::StrokeRect(r, _, _) if clipped => {
+            DrawOp::FillRect(r, _) | DrawOp::StrokeRect(r, _, _) if clipped => {
+                // both corners must be inside the clip
                 if !clip.contains(Point::new(r.x, r.y))
                     || !clip.contains(Point::new(r.x + r.w - 1, r.y + r.h - 1))
                 {

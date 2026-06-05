@@ -15,6 +15,16 @@ impl Color {
     pub const BLACK: Color = Color::rgb(0, 0, 0);
     pub const WHITE: Color = Color::rgb(0xFF, 0xFF, 0xFF);
     pub const GRAY: Color = Color::rgb(0x80, 0x80, 0x80);
+
+    /// Unpack the raw RGB565 channels `(r5, g6, b5)` — the single source for the bit layout.
+    pub const fn channels(self) -> (u16, u16, u16) {
+        ((self.0 >> 11) & 0x1F, (self.0 >> 5) & 0x3F, self.0 & 0x1F)
+    }
+
+    /// Repack raw RGB565 channels `(r5, g6, b5)` into a `Color`.
+    pub const fn from_channels(r5: u16, g6: u16, b5: u16) -> Self {
+        Self(((r5 & 0x1F) << 11) | ((g6 & 0x3F) << 5) | (b5 & 0x1F))
+    }
 }
 
 /// Opaque font selector resolved by the backend/theme.
