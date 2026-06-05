@@ -1,16 +1,16 @@
 //! The retained view tree. Builders allocate nodes into the runtime arena and return ids.
 
 use crate::geometry::{Point, Rect};
+use crate::reactive::anim::{Anim, Animated, Easing};
+use crate::reactive::layout::CAROUSEL_ROW_PITCH;
 use crate::reactive::runtime::{with_runtime, EffectId, NodeId, OwnerId, Runtime};
 use crate::reactive::scope::Scope;
 use crate::reactive::{MAX_CHILDREN, TEXT_CAP};
 use heapless::Vec;
 
-// --- carousel behavior (centered window + crude slide); NOT memory capacities ---
+// --- carousel behavior (centered window + animated slide); NOT memory capacities ---
 /// Rows shown at once in a carousel (the selection sits in the middle).
 pub const VISIBLE: usize = 3;
-/// Frames in the crude carousel slide animation.
-pub const ANIM_STEPS: u8 = 3;
 
 /// Mark a node dirty (idempotent). Used when focus moves so the affected buttons repaint.
 fn mark_dirty(rt: &mut Runtime<'_>, node: Option<NodeId>) {
@@ -29,6 +29,7 @@ fn mark_dirty(rt: &mut Runtime<'_>, node: Option<NodeId>) {
 /// arena = drawn on top) wins; no-op when no button is hit. Focus/selection are set inside the
 /// lock; the handler runs OUTSIDE it (take-out / put-back), matching `invoke_handler_of_focus`.
 pub(crate) fn invoke_handler_at(p: Point) {
+    let mut armed = None;
     let hit = with_runtime(|rt| {
         let mut found = None;
         for (i, n) in rt.nodes.iter().enumerate() {
@@ -42,7 +43,7 @@ pub(crate) fn invoke_handler_at(p: Point) {
                 // Re-center the clicked row; delta 0 means it's already the centered selection.
                 if let Some(delta) = carousel_slot_delta(rt, cnode, id) {
                     if delta != 0 {
-                        carousel_nav_inner(rt, cnode, delta);
+                        armed = carousel_nav_inner(rt, cnode, delta);
                     }
                 }
             }
@@ -55,6 +56,8 @@ pub(crate) fn invoke_handler_at(p: Point) {
         }
         Some(id)
     });
+    // Arm the slide (re-enters the lock) only after the hit-test critical section is released.
+    arm_carousel_slide(armed);
     if let Some(node) = hit {
         crate::reactive::runtime::invoke_handler_of(node);
     }
@@ -72,7 +75,7 @@ pub enum Kind {
     Button { label: &'static str, on_press: EffectId, pressed: bool },
     Column { children: Vec<NodeId, MAX_CHILDREN>, spacing: i16 },
     Row { children: Vec<NodeId, MAX_CHILDREN>, spacing: i16 },
-    Carousel { children: Vec<NodeId, MAX_CHILDREN>, selected: usize, offset: usize, anim_frame: u8, anim_dir: i8 },
+    Carousel { children: Vec<NodeId, MAX_CHILDREN>, selected: usize, offset: usize, slide: Animated<i16> },
 }
 
 #[derive(Clone)]
@@ -198,64 +201,60 @@ fn carousel_slot_delta(rt: &Runtime<'_>, cnode: NodeId, target: NodeId) -> Optio
 
 /// Move carousel selection by `delta`, wrapping. The selection always sits in the MIDDLE slot
 /// (centered carousel): `offset` is the index shown in the TOP slot = the item just "above" the
-/// selection. Every press moves the view one row, so every nav arms the slide animation. Dirties
-/// the visible slots.
-fn carousel_nav_inner(rt: &mut Runtime<'_>, cnode: NodeId, delta: i32) {
+/// selection. Does the instant logical jump (selection/offset/focus + dirty the carousel node)
+/// while the caller already holds `rt`, and RETURNS `(slide, d)` — the slide handle and the one-
+/// pitch displacement to arm it with. The caller arms it (`set_immediate`/`animate_to`) OUTSIDE
+/// the lock via [`arm_carousel_slide`], because those re-enter `with_runtime` and must not nest.
+fn carousel_nav_inner(rt: &mut Runtime<'_>, cnode: NodeId, delta: i32) -> Option<(Animated<i16>, i16)> {
     let (children, sel) = match &rt.nodes[cnode.0 as usize].kind {
         Kind::Carousel { children, selected, .. } => (children.clone(), *selected),
-        _ => return,
+        _ => return None,
     };
     let n = children.len();
-    if n == 0 { return; }
+    if n == 0 { return None; }
     let new_sel = (sel as isize + delta as isize).rem_euclid(n as isize) as usize;
     let new_off = (new_sel + n - 1) % n; // top slot = the item above the centered selection
-    if let Kind::Carousel { selected, offset, anim_frame, anim_dir, .. } = &mut rt.nodes[cnode.0 as usize].kind {
-        *selected = new_sel;
-        *offset = new_off;
-        *anim_frame = ANIM_STEPS;
-        *anim_dir = if delta >= 0 { 1 } else { -1 };
-    }
+    let slide = match &mut rt.nodes[cnode.0 as usize].kind {
+        Kind::Carousel { selected, offset, slide, .. } => {
+            *selected = new_sel;
+            *offset = new_off;
+            *slide
+        }
+        _ => return None,
+    };
     rt.focus = Some(children[new_sel]);
-    for k in 0..VISIBLE {
-        let nid = children[(new_off + k) % n];
-        if !rt.dirty.contains(&nid) {
-            let _ = rt.dirty.push(nid);
-        }
+    // The carousel self-draws its clipped window now, so dirty the CAROUSEL node (not the child
+    // buttons, which must never paint unclipped). The first repaint shows the armed (one-pitch-off)
+    // window; the slide's `dirty_node` keeps it dirty for each subsequent animation tick.
+    if !rt.dirty.contains(&cnode) {
+        let _ = rt.dirty.push(cnode);
+    }
+    // Rows start one pitch off (below on a down-scroll, above on an up-scroll) and glide to 0.
+    let d = if delta >= 0 { CAROUSEL_ROW_PITCH } else { -CAROUSEL_ROW_PITCH };
+    Some((slide, d))
+}
+
+/// Arm a carousel slide OUTSIDE the runtime lock: jump it one pitch off, then animate it back to 0
+/// so the new window slides into place. Both calls re-enter `with_runtime`, so this must run after
+/// the nav critical section has been released.
+fn arm_carousel_slide(armed: Option<(Animated<i16>, i16)>) {
+    if let Some((slide, d)) = armed {
+        slide.set_immediate(d);
+        slide.animate_to(0);
     }
 }
 
-/// True if any carousel has an animation in progress (`anim_dir != 0`).
-pub(crate) fn any_carousel_animating(rt: &Runtime<'_>) -> bool {
-    rt.nodes.iter().any(|nd| matches!(&nd.kind, Kind::Carousel { anim_dir, .. } if *anim_dir != 0))
-}
-
-/// Advance every animating carousel by one frame. At frame 0 the resting frame has been drawn,
-/// so clear the animation and drop pending dirties (the anim path already painted them).
-pub(crate) fn step_carousel_anim(rt: &mut Runtime<'_>) {
-    let mut finished = false;
-    for nd in rt.nodes.iter_mut() {
-        if let Kind::Carousel { anim_frame, anim_dir, .. } = &mut nd.kind {
-            if *anim_dir != 0 {
-                if *anim_frame == 0 {
-                    *anim_dir = 0;
-                    finished = true;
-                } else {
-                    *anim_frame -= 1;
-                }
-            }
-        }
-    }
-    if finished {
-        rt.dirty.clear();
-    }
-}
-
-/// Public navigation entry: one critical section. Carousel-aware, else plain button cycling.
+/// Public navigation entry: one critical section for the logical jump, then arm the slide OUTSIDE
+/// it (the slide methods re-enter `with_runtime`). Carousel-aware, else plain button cycling.
 pub(crate) fn nav(delta: i32) {
-    with_runtime(|rt| match find_carousel(rt) {
+    let armed = with_runtime(|rt| match find_carousel(rt) {
         Some(cnode) => carousel_nav_inner(rt, cnode, delta),
-        None => if delta >= 0 { focus_next_inner(rt) } else { focus_prev_inner(rt) },
+        None => {
+            if delta >= 0 { focus_next_inner(rt) } else { focus_prev_inner(rt) }
+            None
+        }
     });
+    arm_carousel_slide(armed);
 }
 
 /// Run the focused node's handler (if any). Reads focus inside the lock, then invokes OUTSIDE
@@ -355,13 +354,18 @@ pub fn carousel(cx: Scope, items: &[NodeId]) -> NodeId {
     for &it in items {
         let _ = children.push(it); // truncates past MAX_CHILDREN; acceptable for Layer #1
     }
-    with_runtime(|rt| {
+    // The slide offset (px) the visible rows are drawn at, tweened to 0 each nav. Allocate it,
+    // push the node, then point the animator at the node — three SEQUENTIAL locks, never nested.
+    let slide = cx.tween(0i16, Anim { dur_ms: 300, easing: Easing::Linear });
+    let nid = with_runtime(|rt| {
         rt.push_node(Node {
-            kind: Kind::Carousel { children, selected: 0, offset: 0, anim_frame: 0, anim_dir: 0 },
+            kind: Kind::Carousel { children, selected: 0, offset: 0, slide },
             bounds: Rect::new(0, 0, 0, 0),
             owner: cx.owner,
         })
-    })
+    });
+    slide.set_dirty_node(nid); // so the driver's advance_anims repaints the carousel each tick
+    nid
 }
 
 /// Reset a carousel to its first item and focus it (call once after building the tree).
@@ -384,6 +388,7 @@ pub fn carousel_select_first(c: NodeId) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::reactive::anim::advance_anims;
     use crate::reactive::runtime::fresh_runtime;
 
     #[test]
@@ -514,9 +519,10 @@ mod tests {
         ];
         let car = carousel(cx, &items);
         with_runtime(|rt| match &rt.nodes[car.0 as usize].kind {
-            Kind::Carousel { children, selected, offset, anim_frame, anim_dir } => {
+            Kind::Carousel { children, selected, offset, slide } => {
                 assert_eq!(children.len(), 4);
-                assert_eq!((*selected, *offset, *anim_frame, *anim_dir), (0, 0, 0, 0));
+                assert_eq!((*selected, *offset), (0, 0));
+                assert_eq!(slide.get_in(rt), 0, "slide rests at 0");
             }
             _ => panic!("expected a carousel"),
         });
@@ -550,17 +556,20 @@ mod tests {
         ];
         let car = carousel(cx, &items);
         carousel_select_first(car);
-        nav(1); // 0 -> 1
-        with_runtime(|rt| if let Kind::Carousel { selected, offset, anim_dir, anim_frame, .. } = &rt.nodes[car.0 as usize].kind {
-            assert_eq!(*selected, 1, "selection advanced and stays centered");
-            assert_eq!(*offset, 0, "top slot = item above the centered selection");
-            assert_eq!(*anim_dir, 1, "every nav animates");
-            assert_eq!(*anim_frame, crate::reactive::ANIM_STEPS);
+        nav(1); // 0 -> 1 (down-scroll: rows start one pitch BELOW and glide up to 0)
+        let slide = with_runtime(|rt| match &rt.nodes[car.0 as usize].kind {
+            Kind::Carousel { selected, offset, slide, .. } => {
+                assert_eq!(*selected, 1, "selection advanced and stays centered");
+                assert_eq!(*offset, 0, "top slot = item above the centered selection");
+                assert_eq!(slide.get_in(rt), CAROUSEL_ROW_PITCH, "down-scroll arms slide one pitch off");
+                *slide
+            }
+            _ => unreachable!(),
         });
+        assert!(with_runtime(|rt| rt.animators[slide.anim.0 as usize].active), "every nav arms the slide");
         with_runtime(|rt| assert_eq!(rt.focus, Some(items[1]), "focus follows the centered item"));
-        for _ in 0..=(crate::reactive::ANIM_STEPS as usize) {
-            with_runtime(|rt| step_carousel_anim(rt));
-        }
+        // Drain the slide so the shared runtime isn't left animating for the next test.
+        with_runtime(|rt| advance_anims(rt, 1000));
         cx.dispose();
     }
 
@@ -593,9 +602,7 @@ mod tests {
         });
         assert_eq!(hits.get(), 1, "select + activate: the row's handler also runs");
         // Drain the armed slide so the shared runtime isn't left animating for the next test.
-        for _ in 0..=(crate::reactive::ANIM_STEPS as usize) {
-            with_runtime(|rt| step_carousel_anim(rt));
-        }
+        with_runtime(|rt| advance_anims(rt, 1000));
         cx.dispose();
     }
 
@@ -614,14 +621,12 @@ mod tests {
         with_runtime(|rt| if let Kind::Carousel { selected, .. } = &rt.nodes[car.0 as usize].kind {
             assert_eq!(*selected, 0, "down from last wraps to first");
         });
-        for _ in 0..=(crate::reactive::ANIM_STEPS as usize) {
-            with_runtime(|rt| step_carousel_anim(rt));
-        }
+        with_runtime(|rt| advance_anims(rt, 1000));
         cx.dispose();
     }
 
     #[test]
-    fn step_counts_down_then_clears() {
+    fn slide_animates_then_deactivates() {
         fresh_runtime();
         let cx = Scope::root();
         let items = [
@@ -630,16 +635,17 @@ mod tests {
         ];
         let car = carousel(cx, &items);
         carousel_select_first(car);
-        nav(1); nav(1); nav(1); // 0->1->2->3 ; 2->3 scrolls (offset 0->1) -> arms
-        let armed = with_runtime(|rt| matches!(&rt.nodes[car.0 as usize].kind,
-            Kind::Carousel { anim_dir, .. } if *anim_dir != 0));
-        assert!(armed, "scroll armed this carousel");
-        for _ in 0..=(crate::reactive::ANIM_STEPS as usize) {
-            with_runtime(|rt| step_carousel_anim(rt));
-        }
-        let still = with_runtime(|rt| matches!(&rt.nodes[car.0 as usize].kind,
-            Kind::Carousel { anim_dir, .. } if *anim_dir != 0));
-        assert!(!still, "animation clears after ANIM_STEPS+1 steps");
+        with_runtime(|rt| rt.now_ms = 0);
+        nav(1); // arms the slide (set_immediate one pitch, animate_to 0)
+        let slide = with_runtime(|rt| match &rt.nodes[car.0 as usize].kind {
+            Kind::Carousel { slide, .. } => *slide,
+            _ => unreachable!(),
+        });
+        assert!(with_runtime(|rt| rt.animators[slide.anim.0 as usize].active), "scroll armed the slide");
+        // Past the 300ms duration the slide rests at 0 and the animator deactivates.
+        with_runtime(|rt| advance_anims(rt, 300));
+        assert_eq!(with_runtime(|rt| slide.get_in(rt)), 0, "slide settles back to 0");
+        assert!(!with_runtime(|rt| rt.animators[slide.anim.0 as usize].active), "animation clears after the duration");
         cx.dispose();
     }
 }

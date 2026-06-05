@@ -30,6 +30,8 @@ pub trait Canvas {
     fn stroke_rect(&mut self, r: Rect, color: Color, width: u16);
     /// Draw `s` at `at`; returns the pixel size the text occupied.
     fn text(&mut self, at: Point, s: &str, font: FontId, color: Color) -> Size;
+    /// Confine subsequent draws to `clip` (scissor). `None` = whole surface.
+    fn set_clip(&mut self, clip: Option<Rect>);
 }
 
 /// Glyph cell size for FontId(0): 6x8 px (matches a classic 5x7+gap bitmap font).

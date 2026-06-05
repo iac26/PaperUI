@@ -1,6 +1,7 @@
 //! A disposal scope. Signals created under a scope are freed when it is disposed.
 //! Layer #1 uses the root scope; `child` is the seam Navigation (Layer #2) needs.
 
+use crate::reactive::anim::{Anim, AnimKind, Animatable, Animated};
 use crate::reactive::bounded_fn::BoundedFn;
 use crate::reactive::runtime::{with_runtime, EffectId, OwnerId};
 use crate::reactive::signal::{ReactiveValue, Signal};
@@ -23,6 +24,18 @@ impl Scope {
     }
     pub fn signal<T: ReactiveValue>(self, init: T) -> Signal<T> {
         with_runtime(|rt| Signal::alloc_in(rt, self.owner, init))
+    }
+    /// A clock-driven reactive value. Allocates a signal (seeded with `init`) and a Transition
+    /// animator (idle: `from == to == init`), both owned by this scope, so `dispose` frees them.
+    pub fn tween<T: Animatable>(self, init: T, anim: Anim) -> Animated<T> {
+        with_runtime(|rt| {
+            let sig = Signal::alloc_in(rt, self.owner, init);
+            let id = rt.alloc_anim(self.owner, sig.id, AnimKind::Transition, anim.dur_ms);
+            let a = &mut rt.animators[id.0 as usize];
+            a.from = init.to_av();
+            a.to = init.to_av();
+            Animated::new(sig, id)
+        })
     }
     pub fn dispose(self) {
         with_runtime(|rt| rt.free_owner(self.owner));

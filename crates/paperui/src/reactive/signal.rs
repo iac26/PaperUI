@@ -1,6 +1,8 @@
 //! Copy, size-bounded reactive cells. `get` records a dependency if an effect is running;
 //! `set` bumps the epoch and dirties subscribers only when the value actually changes.
 
+use crate::paint::Color;
+use crate::reactive::anim::AnimValue;
 use crate::reactive::runtime::{with_runtime, OwnerId, Runtime, SignalId, TypeIdShim};
 use core::any::TypeId;
 use core::marker::PhantomData;
@@ -51,20 +53,8 @@ impl<T: ReactiveValue> Signal<T> {
     }
 
     pub fn set(self, v: T) {
-        with_runtime(|rt| {
-            let old = value_cell::read_value::<T>(rt, self.id);
-            if old != v {
-                value_cell::write_value(rt, self.id, v);
-                rt.epoch = rt.epoch.wrapping_add(1);
-                // dirty all subscribers
-                for i in 0..rt.signals[self.id.0 as usize].subs.len() {
-                    let n = rt.signals[self.id.0 as usize].subs[i];
-                    if !rt.dirty.contains(&n) {
-                        let _ = rt.dirty.push(n);
-                    }
-                }
-            }
-        });
+        // Same write protocol as the animator tick path; share the one implementation.
+        with_runtime(|rt| set_typed::<T>(rt, self.id, v));
     }
 
     pub fn update(self, f: impl FnOnce(&mut T)) {
@@ -76,6 +66,39 @@ impl<T: ReactiveValue> Signal<T> {
     pub fn with<R>(self, f: impl FnOnce(&T) -> R) -> R {
         let v = self.get();
         f(&v)
+    }
+
+    /// Read the current value WITHOUT locking or subscribing. For callers that already hold the
+    /// runtime (e.g. the animator tick inside `with_runtime`); using `get` there would re-enter
+    /// the non-reentrant critical section and deadlock.
+    pub(crate) fn get_in(self, rt: &Runtime) -> T {
+        value_cell::read_value::<T>(rt, self.id)
+    }
+}
+
+/// Non-generic, lock-free signal write used by the animator tick (which carries an `AnimValue`,
+/// not a `T`). Dispatches on the variant to recover the concrete type, then mirrors `Signal::set`'s
+/// change-detect + epoch-bump + subscriber-dirty — but on the already-held `rt`, NOT via
+/// `with_runtime` (the caller already holds it; nesting would deadlock).
+pub(crate) fn set_signal_av(rt: &mut Runtime, id: SignalId, av: AnimValue) {
+    match av {
+        AnimValue::I16(v) => set_typed::<i16>(rt, id, v),
+        AnimValue::Color(c) => set_typed::<Color>(rt, id, c),
+        AnimValue::Frame(f) => set_typed::<u8>(rt, id, f),
+    }
+}
+
+fn set_typed<T: ReactiveValue>(rt: &mut Runtime, id: SignalId, v: T) {
+    let old = value_cell::read_value::<T>(rt, id);
+    if old != v {
+        value_cell::write_value(rt, id, v);
+        rt.epoch = rt.epoch.wrapping_add(1);
+        for i in 0..rt.signals[id.0 as usize].subs.len() {
+            let n = rt.signals[id.0 as usize].subs[i];
+            if !rt.dirty.contains(&n) {
+                let _ = rt.dirty.push(n);
+            }
+        }
     }
 }
 

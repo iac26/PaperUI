@@ -17,6 +17,7 @@ impl<'a, T> Arena<'a, T> {
     pub(crate) fn len(&self) -> usize {
         self.len
     }
+    #[cfg(test)] // only the test suite checks emptiness now; render uses len()/early-return
     pub(crate) fn is_empty(&self) -> bool {
         self.len == 0
     }
@@ -41,9 +42,6 @@ impl<'a, T> Arena<'a, T> {
     }
     pub(crate) fn iter(&self) -> core::slice::Iter<'_, T> {
         self.as_slice().iter()
-    }
-    pub(crate) fn iter_mut(&mut self) -> core::slice::IterMut<'_, T> {
-        self.as_mut_slice().iter_mut()
     }
 }
 

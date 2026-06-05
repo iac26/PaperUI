@@ -98,12 +98,13 @@ fn place_inner(rt: &mut Runtime<'_>, node: NodeId, x: i16, y: i16, w: i16, h: i1
         }
     }
 
-    // Carousel: place the visible window as uniform full-width rows at constant y; hide the rest.
+    // Carousel: place the visible window as uniform full-width rows; hide the rest. The rows are
+    // shifted by the animated `slide` (read with the lock already held, never `get`).
     let carousel = match &rt.nodes[node.0 as usize].kind {
-        Kind::Carousel { children, offset, .. } => Some((children.clone(), *offset)),
+        Kind::Carousel { children, offset, slide, .. } => Some((children.clone(), *offset, slide.get_in(rt))),
         _ => None,
     };
-    if let Some((children, offset)) = carousel {
+    if let Some((children, offset, slide)) = carousel {
         let n = children.len();
         if n > 0 {
             // Hide every child first, then place the VISIBLE window (wraps) into its slots. The
@@ -114,7 +115,7 @@ fn place_inner(rt: &mut Runtime<'_>, node: NodeId, x: i16, y: i16, w: i16, h: i1
             }
             for k in 0..VISIBLE {
                 let c = children[(offset + k) % n];
-                let yy = y + k as i16 * CAROUSEL_ROW_PITCH;
+                let yy = y + k as i16 * CAROUSEL_ROW_PITCH + slide;
                 place_inner(rt, c, x, yy, w, CAROUSEL_ROW_H);
             }
         }

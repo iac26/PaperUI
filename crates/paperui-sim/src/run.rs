@@ -1,7 +1,7 @@
 //! The windowed run loop: build a SimulatorDisplay, paint the first full frame, then pump
 //! window events into the reactive core and surgically repaint when something is dirty.
 
-use std::{thread, time::Duration};
+use std::{thread, time::{Duration, Instant}};
 
 use embedded_graphics::geometry::Size as EgSize;
 use embedded_graphics::pixelcolor::Rgb565;
@@ -10,7 +10,7 @@ use embedded_graphics_simulator::{
 };
 
 use paperui::reactive::{
-    dispatch, layout, render_frame_full, render_tick, NodeId, UiEvent,
+    dispatch, layout, render_frame_full, render_tick, tick_anims, NodeId, UiEvent,
 };
 use paperui::{EgCanvas, Rect, WidgetTheme};
 
@@ -26,6 +26,8 @@ where
 {
     let mut display =
         SimulatorDisplay::<Rgb565>::new(EgSize::new(cfg.size.w as u32, cfg.size.h as u32));
+
+    let start = Instant::now();
 
     // Lay the tree out to fill the panel, then paint the first full frame.
     layout(root, Rect::new(0, 0, cfg.size.w, cfg.size.h));
@@ -56,8 +58,9 @@ where
                 _ => {}
             }
         }
-        // Tick the reactive core every frame: advances a carousel slide if one is animating,
-        // else surgically repaints dirty nodes (a no-op when idle).
+        // Advance animators with the wall-clock time, then surgically repaint any dirty nodes.
+        let now_ms = start.elapsed().as_millis() as u32;
+        tick_anims(now_ms);
         {
             let mut canvas = EgCanvas::new(&mut display);
             render_tick(root, &mut canvas, theme);

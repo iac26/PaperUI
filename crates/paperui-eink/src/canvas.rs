@@ -13,16 +13,24 @@ pub struct Gray4Canvas {
     pub buf: [u8; FB_PIXELS],
     pub w: i16,
     pub h: i16,
+    /// Active scissor rectangle; `None` means the whole framebuffer is drawable.
+    clip: Option<Rect>,
 }
 
 impl Gray4Canvas {
     pub fn new() -> Self {
-        Self { buf: [0x0F; FB_PIXELS], w: FB_W as i16, h: FB_H as i16 }
+        Self { buf: [0x0F; FB_PIXELS], w: FB_W as i16, h: FB_H as i16, clip: None }
     }
 
     fn put(&mut self, x: i16, y: i16, gray: u8) {
+        // Bounds-check the framebuffer dimensions first, then honour the scissor.
         if x < 0 || y < 0 || x >= self.w || y >= self.h {
             return;
+        }
+        if let Some(c) = self.clip {
+            if !c.contains(Point::new(x, y)) {
+                return;
+            }
         }
         self.buf[y as usize * FB_W + x as usize] = gray & 0x0F;
     }
@@ -35,9 +43,13 @@ impl Default for Gray4Canvas {
 }
 
 fn gray4(c: Color) -> u8 {
-    let r = (c.0 >> 16) & 0xFF;
-    let g = (c.0 >> 8) & 0xFF;
-    let b = c.0 & 0xFF;
+    // Color is now packed RGB565. Unpack each channel and expand back to ~8-bit
+    // (replicate the high bits into the low gap) so the luma weights stay calibrated
+    // for 0..=255 inputs. Precision is 5/6-bit-limited, but the output is 4-bit gray.
+    let (r5, g6, b5) = c.channels();
+    let r = ((r5 << 3) | (r5 >> 2)) as u32;
+    let g = ((g6 << 2) | (g6 >> 4)) as u32;
+    let b = ((b5 << 3) | (b5 >> 2)) as u32;
     let luma = (r * 54 + g * 183 + b * 19) >> 8;
     (luma >> 4) as u8
 }
@@ -79,5 +91,9 @@ impl Canvas for Gray4Canvas {
             cx += FONT0_W;
         }
         Size::new(s.chars().count() as i16 * FONT0_W, FONT0_H)
+    }
+
+    fn set_clip(&mut self, clip: Option<Rect>) {
+        self.clip = clip;
     }
 }

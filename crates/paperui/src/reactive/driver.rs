@@ -4,9 +4,10 @@
 
 use crate::geometry::Point;
 use crate::paint::{Canvas, WidgetTheme};
+use crate::reactive::anim::advance_anims;
 use crate::reactive::node::{invoke_handler_at, invoke_handler_of_focus, nav};
 use crate::reactive::render::{render_frame_full, render_tick};
-use crate::reactive::runtime::NodeId;
+use crate::reactive::runtime::{with_runtime, NodeId};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum UiEvent {
@@ -17,9 +18,12 @@ pub enum UiEvent {
 }
 
 /// A source of UI events (buttons, touch, …). `now_ms` is a monotonic-ish millisecond clock
-/// the source may use for gesture timing.
+/// the source may use for gesture timing; the driver reads it each iteration to pace animations.
 pub trait EventSource {
     fn poll(&mut self, now_ms: u32) -> Option<UiEvent>;
+    /// Real monotonic millisecond clock (the app reads its hardware timer). Drives animation
+    /// progress; elapsed is computed with `wrapping_sub`, so the ~49-day `u32` wrap is harmless.
+    fn now_ms(&mut self) -> u32;
 }
 
 /// Route a UI event into the reactive core. Public so an external driver (e.g. the desktop
@@ -33,13 +37,10 @@ pub fn dispatch(ev: UiEvent) {
     }
 }
 
-/// The synchronous app loop. Never returns. Renders once, then polls the source, dispatches
-/// events, and re-renders only when something is dirty.
-///
-/// NOTE (Layer #1): `now_ms` here is a placeholder clock advanced per iteration; a real driver
-/// should feed a true millisecond timer (the EventSource may also keep its own). Gesture
-/// timing (hold/double) depends on a real clock — wire one in at integration (Task 12).
-pub fn run<C, T, S>(root: NodeId, canvas: &mut C, theme: &T, src: &mut S, mut now_ms: u32) -> !
+/// The synchronous app loop. Never returns. Renders once, then per iteration reads the source's
+/// real clock, polls + dispatches events, advances active animations (which dirty their
+/// dependents), and re-renders only when something is dirty.
+pub fn run<C, T, S>(root: NodeId, canvas: &mut C, theme: &T, src: &mut S) -> !
 where
     C: Canvas,
     T: WidgetTheme<C>,
@@ -47,11 +48,12 @@ where
 {
     render_frame_full(root, canvas, theme);
     loop {
-        while let Some(ev) = src.poll(now_ms) {
+        let now = src.now_ms();
+        while let Some(ev) = src.poll(now) {
             dispatch(ev);
         }
+        with_runtime(|rt| advance_anims(rt, now));
         render_tick(root, canvas, theme);
-        now_ms = now_ms.wrapping_add(5);
     }
 }
 
@@ -74,6 +76,9 @@ mod tests {
     impl EventSource for Scripted {
         fn poll(&mut self, _now: u32) -> Option<UiEvent> {
             self.0.pop_front()
+        }
+        fn now_ms(&mut self) -> u32 {
+            0
         }
     }
 
